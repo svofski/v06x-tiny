@@ -352,7 +352,7 @@ int trace_enable = 0;
 
 IRAM_ATTR
 int i8080_execute(int opcode) {
-    if (trace_enable) printf("pc=%04x instr=%02x\n", PC, opcode);
+    if (trace_enable) printf("pc=%04x i=%02x A=%02x BC=%04x\n", PC, opcode, A, BC);
     int cpu_cycles; (void)cpu_cycles;
     int v_cycles;
     switch (opcode) {

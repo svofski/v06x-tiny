@@ -4,10 +4,10 @@
 namespace esp_filler {
     constexpr int center_offset = DEFAULT_CENTER_OFFSET;
     constexpr int screen_width = DEFAULT_SCREEN_WIDTH;
-    constexpr int first_visible_line = 10;
+    constexpr int first_visible_line = 24; // typical v06x: 24
     constexpr int first_raster_line = 40;
     constexpr int last_raster_line = 40 + 256;
-    constexpr int last_visible_line = 309;
+    constexpr int last_visible_line = 311;
 
     extern int raster_line;
     extern int irq;

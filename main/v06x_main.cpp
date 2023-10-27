@@ -23,6 +23,8 @@
 #include "options.h"
 #include "esp_filler.h"
 
+#include "testroms.h"
+
 extern const char *TAG;
 
 volatile int v06x_framecount = 0;
@@ -31,33 +33,6 @@ static Memory * memory;
 static QueueHandle_t que_scaler_to_emu;
 static uint8_t * buf0;
 static uint8_t * buf1;
-
-extern "C" unsigned char wave_rom[];
-extern "C" unsigned int wave_rom_len;
-
-extern "C" unsigned char oblitterated_rom[];
-extern "C" unsigned int oblitterated_rom_len;
-
-extern "C" unsigned char arzak_rom[];
-extern "C" unsigned int arzak_rom_len;
-
-extern "C" unsigned char v06x_rom[];
-extern "C" unsigned int v06x_rom_len;
-
-extern "C" unsigned char s8snail_rom[];
-extern "C" unsigned int s8snail_rom_len;
-
-extern "C" unsigned char clrs_rom[];
-extern "C" unsigned int clrs_rom_len;
-
-extern "C" unsigned char clrspace_rom[];
-extern "C" unsigned int clrspace_rom_len;
-
-extern "C" unsigned char kittham1_rom[];
-extern "C" unsigned int kittham1_rom_len;
-
-extern "C" unsigned char tiedye2_rom[];
-extern "C" unsigned int tiedye2_rom_len;
 
 void v06x_init(QueueHandle_t from_scaler, uint8_t * _buf0, uint8_t * _buf1)
 {
@@ -206,18 +181,37 @@ void v06x_task(void *param)
     // for (size_t i = 0; i < kittham1_rom_len; ++i) {
     //     memory->write(256 + i, kittham1_rom[i], false);
     // }
-    // for (size_t i = 0; i < clrspace_rom_len; ++i) {
-    //     memory->write(256 + i, clrspace_rom[i], false);
+    // for (size_t i = 0; i < ROMLEN(clrspace); ++i) {
+    //     memory->write(256 + i, ROM(clrspace)[i], false);
     // }
     // for (size_t i = 0; i < oblitterated_rom_len; ++i) {
     //     memory->write(256 + i, oblitterated_rom[i], false);
     // }
-    for (size_t i = 0; i < arzak_rom_len; ++i) {
-        memory->write(256 + i, arzak_rom[i], false);
-    }
-    // for (size_t i = 0; i < s8snail_rom_len; ++i) {
-    //     memory->write(256 + i, s8snail_rom[i], false);
+    // for (size_t i = 0; i < arzak_rom_len; ++i) {
+    //     memory->write(256 + i, arzak_rom[i], false);
     // }
+    // for (size_t i = 0; i < ROMLEN(s8snail); ++i) {
+    //     memory->write(256 + i, ROM(s8snail)[i], false);
+    // }
+    for (size_t i = 0; i < ROMLEN(bord); ++i) {
+        memory->write(256 + i, ROM(bord)[i], false);
+    }
+    // for (size_t i = 0; i < ROMLEN(bord2); ++i) {
+    //     memory->write(256 + i, ROM(bord2)[i], false);
+    // }
+    // for (size_t i = 0; i < ROMLEN(bazis); ++i) {
+    //     memory->write(256 + i, ROM(bazis)[i], false);
+    // }
+    // for (size_t i = 0; i < ROMLEN(wave); ++i) {
+    //     memory->write(256 + i, ROM(wave)[i], false);
+    // }
+    // for (size_t i = 0; i < ROMLEN(sunsetb); ++i) {
+    //     memory->write(256 + i, ROM(sunsetb)[i], false);
+    // }
+    // for (size_t i = 0; i < ROMLEN(hscroll); ++i) {
+    //     memory->write(256 + i, ROM(hscroll)[i], false);
+    // }
+
     printf("loaded oblitterated\n");
     board->reset(Board::ResetMode::BLKSBR);
 

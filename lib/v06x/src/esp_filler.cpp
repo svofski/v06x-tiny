@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
+#include "esp_timer.h"
 #include "esp_attr.h"
 #include <cstdint>
 
@@ -212,6 +213,7 @@ inline void slab8_pal()
         *bmp.bmp16++ = py2[i2];
         //if (commit_pal) io->commit_palette(i2); // this is where i thought it should be
         *bmp.bmp16++ = py2[i3];
+        //if (commit_pal) io->commit_palette(i3); // this is where i thought it should be
         *bmp.bmp16++ = py2[i4];
     }
 }
@@ -221,6 +223,7 @@ IRAM_ATTR
 void vborderslab()
 {
     uint32_t c = py2[border_index];
+    //c = 0xc71f;
     c = c << 16 | c;
     *bmp.bmp32++ = c << 16 | c;
     *bmp.bmp32++ = c << 16 | c;
@@ -280,30 +283,28 @@ int bob(int maxframes)
     int ipixels = 0; 
 
     ///int commit_time = 0, commit_time_pal = 0;
-    int line5 = 0;
+    int line6 = 0;
 
     printf("buffers[0]=%p buffers[0].10=%p  buffers[1]=%p buffers[0].10=%p\n", buffers[0], buffers[0]+10, buffers[1], buffers[1]+10);
 
     for(int frm = 0; maxframes == 0 || frm < maxframes; ++frm) {
         write_buffer = 0;
         bmp.bmp8 = buffers[write_buffer];
-        line5 = 5;
+        line6 = 6;
+        int rpixel0 = rpixels;
 
         //printf("frame %d\n", frm);
-
         // frame counted in 16-pixel chunks
         // 768/16 = 48, 0x30 -> next line when i & 0x3f == 0x30
         for (int line = 0; line < 312; ++line) {
-            //if (line == 0) {
-            //    irq = inte; 
-            //}
             if (line == 40) {
                 fb_row = io->ScrollStart(); 
             }
 
             int column;
-            bool line_is_visible = line >= first_visible_line && line < last_visible_line;
+            bool line_is_visible = line >= first_visible_line && line <= last_visible_line;
 
+            // invisible 
             if (!line_is_visible) {
                 for (column = 0; column < 48; ++column) {
                     if (line == 0 && column == 12) {
@@ -316,7 +317,6 @@ int bob(int maxframes)
                                 i8080cpu::i8080_jump(i8080cpu::i8080_pc() + 1);
                             }
                             ipixels += i8080cpu::i8080_execute(0xff); // rst7
-                            //printf("interrupt\n");
                         }
                         #ifdef TIMED_COMMIT
                         commit_pal = false;
@@ -335,19 +335,39 @@ int bob(int maxframes)
                 goto rowend;
             }
 
-            if (line < first_raster_line || line >= last_raster_line) {  // visible but no raster, vertical border
+            // if (line == first_visible_line) {
+            //     if (frm == 150) {
+            //         i8080cpu::trace_enable = 1;
+            //     }
+            // }
+
+            // visible but no raster, vertical border
+            if (line < first_raster_line || line >= last_raster_line) {  
                 for (column = 0; column < 48; ++column) {
+                    bool xoxo = false;
                     if (ipixels <= rpixels) [[unlikely]] {
                         #ifdef TIMED_COMMIT
                         commit_pal = false;
                         #endif
+                        //if (i8080cpu::trace_enable) printf("c=%d rpixel=%d ", column, rpixels - rpixel0);
                         ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+                        xoxo = true;
                     }
                     #ifndef TIMED_COMMIT
                     color_index = border_index;
                     #endif
                     if (column >= 10 && column < 42) {
                         vborderslab();
+                        if (xoxo) {
+                            if (i8080cpu::last_opcode == 0x76) 
+                            {
+                                // if (frm == 150) {
+                                //     printf("hlt @%d/%d ", line, write_buffer);
+                                // }
+                                *(bmp.bmp8 - 16) = write_buffer ? (0x07<<3) : 0xc0;
+                            } else
+                                *(bmp.bmp8 - 16) = 0x07;
+                        }
                     }
                     else if (column == 9 || column == 42) {
                         borderslab();
@@ -362,6 +382,7 @@ int bob(int maxframes)
                 goto rowend;
             }
 
+            //i8080cpu::trace_enable = 0;
             // line counted in 16-pixel columns (8 6mhz pixel columns, one v06c byte)
             /// COLUMNS 0..9
             for (column = 0; column < 10; ++column) {
@@ -379,27 +400,32 @@ int bob(int maxframes)
             }
             borderslab();
             fb_column = -1;
-            /// COLUMNS 10...
+            /// COLUMNS 10...41
             for (; column < 42; ++column) {
+                //bool xoxo = false;
                 // (4, 8, 12, 16, 20, 24) * 4
                 if (ipixels <= rpixels) [[unlikely]] {
                     #ifdef TIMED_COMMIT
                     commit_pal = false;
                     #endif
                     ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+                    //xoxo = true;
                 }
 
                 //?color_index = border_index; // important for commit palette
                 ++fb_column;
                 #ifdef TIMED_COMMIT
                 slab8_pal();
+                // if (xoxo) {
+                //     *bmp.bmp16 = 0xf81f;
+                // }                
                 #else
                 slab8();        // will update color_index
                 #endif
                 rpixels += 4;
             }
 
-            // right edge of the bitplane area
+            // COLUMN 42: right edge of the bitplane area
             if (ipixels <= rpixels) [[unlikely]] {
                 #ifdef TIMED_COMMIT
                 commit_pal = false;
@@ -436,16 +462,27 @@ rowend:
                 fb_row = 0xff;
             }
 
-            if (--line5 == 0) {
+            if (--line6 == 0) {
+                //if (frm == 150) {
+                //    printf("line=%d wrbuf=%d\n", line, write_buffer);
+                //}
                 write_buffer ^= 1;
                 bmp.bmp8 = buffers[write_buffer];
-                line5 = 5;
+                line6 = 6;
 
-                if (line > 10 && line < 310) {
+                // don't sync after filling line 311 (last_visible_line = 312)
+                // line = 0, 6, 12, 18, 24, 30...
+                // wr     0  1  0   1   0   1
+                // first visible buffer is 24..29
+                // line = 5:coast, 11: coast, 17: coast, 23: coast, 29: sync with pos_px = 0
+                if (line > first_visible_line && line < last_visible_line) {
                     int pos_px;
                     do {
                         xQueueReceive(::scaler_to_emu, &pos_px, portMAX_DELAY);
-                    } while (line == 14 && pos_px != 0);
+                        //if (frm == 151 && (line == first_visible_line + 6 - 1)) printf("line=%d pos_px=%d", line, pos_px);
+                        //if (frm == 100 && line == 311 - 6) printf("line=%d pos_px/800=%d", line, pos_px/800);
+                    } while (line == first_visible_line + 6 - 1 && pos_px != 0);
+                    //} while (line == 311 - 6 && pos_px != 800 * 470);
                 }
             }
         }

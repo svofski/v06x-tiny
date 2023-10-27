@@ -31,7 +31,7 @@
 #define CONFIG_EXAMPLE_AVOID_TEAR_EFFECT_WITH_SEM 1
 #define CONFIG_EXAMPLE_USE_BOUNCE_BUFFER 1
 #define CONFIG_BOUNCE_ONLY 1
-#define BOUNCE_NLINES 8
+#define BOUNCE_NLINES 10 // 288 * 10/6: scale up 6 lines to 10
 #define SCALE85 1
 
 const char *TAG = "v06x";
@@ -50,7 +50,7 @@ const char *TAG = "v06x";
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////// Please update the following configuration according to your LCD spec //////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define EXAMPLE_LCD_PIXEL_CLOCK_HZ     20500000 // edging at 26000000+ (803ms) // 20500000 50hz
+#define EXAMPLE_LCD_PIXEL_CLOCK_HZ     20500000 // edging at 26500000+ 64+ fps // 20500000 50hz
 #define EXAMPLE_LCD_BK_LIGHT_ON_LEVEL  1
 #define EXAMPLE_LCD_BK_LIGHT_OFF_LEVEL !EXAMPLE_LCD_BK_LIGHT_ON_LEVEL
 #define EXAMPLE_PIN_NUM_BK_LIGHT       2
@@ -100,8 +100,6 @@ const char *TAG = "v06x";
 #define BUF1LINES EXAMPLE_LCD_V_RES
 #endif
 
-
-
 // we use two semaphores to sync the VSYNC event and the LVGL task, to avoid potential tearing effect
 SemaphoreHandle_t sem_vsync_end;
 SemaphoreHandle_t sem_gui_ready;
@@ -118,6 +116,9 @@ volatile int bounce_core = 0;
 volatile int filling = 0;
 volatile int v06x_frame_cycles = 0;
 
+volatile uint64_t lastframe_us = 0;
+volatile uint64_t frameduration_us = 0;
+
 
 uint32_t read_buffer_index;
 uint8_t * bounce_buf8[2];
@@ -130,6 +131,10 @@ user_context_t user_context;
 
 static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t *event_data, void *user_data)
 {
+    frameduration_us = esp_timer_get_time() - lastframe_us;
+    lastframe_us = esp_timer_get_time();
+
+    //esp_lcd_rgb_panel_restart(panel);
     BaseType_t high_task_awoken = pdFALSE;
     if (xSemaphoreTakeFromISR(sem_gui_ready, &high_task_awoken) == pdTRUE) {
         xSemaphoreGiveFromISR(sem_vsync_end, &high_task_awoken);
@@ -149,63 +154,6 @@ bgr233torgb565(uint8_t c)
 
 #define C8TO16(c)   (((((c) & 7) * 4) << 11) | (((((c) >> 3) & 7) * 8) << 5) | ((((c) >> 6) & 3) * 8))
 
-// fill one block with scaling up
-// scaler 3/2 horizontal, 8/5 vertical, or 4x5 -> 6x8
-// bgr233 532x300 -> rgb565 798x480
-static void IRAM_ATTR 
-fillcolumn(uint16_t * col, uint32_t * src)
-{
-    int ofs = 0;
-
-    uint32_t s4_0 = src[0];
-    uint32_t s4_1 = src[BUFCOLUMNS * 1 / 4];
-    uint32_t s4_2 = src[BUFCOLUMNS * 2 / 4];
-    uint32_t s4_3 = src[BUFCOLUMNS * 3 / 4];
-    uint32_t s4_4 = src[BUFCOLUMNS * 4 / 4];
-
-    uint16_t c16_1;
-    uint16_t c16_2;
-    uint16_t c16_3;
-    uint16_t c16_4;
-
-    c16_1 = C8TO16(s4_0 >> 0);
-    c16_2 = C8TO16(s4_0 >> 8);
-    c16_3 = C8TO16(s4_0 >> 16);
-    c16_4 = C8TO16(s4_0 >> 24);
-        // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4; col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 0
-    c16_1 = C8TO16(s4_1 >> 0);
-    c16_2 = C8TO16(s4_1 >> 8);
-    c16_3 = C8TO16(s4_1 >> 16);
-    c16_4 = C8TO16(s4_1 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4; col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 0.625
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4; col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 1.25
-    c16_1 = C8TO16(s4_2 >> 0);
-    c16_2 = C8TO16(s4_2 >> 8);
-    c16_3 = C8TO16(s4_2 >> 16);
-    c16_4 = C8TO16(s4_2 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4; col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 1.875
-    c16_1 = C8TO16(s4_3 >> 0);
-    c16_2 = C8TO16(s4_3 >> 8);
-    c16_3 = C8TO16(s4_3 >> 16);
-    c16_4 = C8TO16(s4_3 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4; col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 2.5
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4; col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 3.125
-    c16_1 = C8TO16(s4_4 >> 0);
-    c16_2 = C8TO16(s4_4 >> 8);
-    c16_3 = C8TO16(s4_4 >> 16);
-    c16_4 = C8TO16(s4_4 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4; col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 3.75
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4; col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 4.375
-}
 
 // fill one block with scaling up
 // scaler 5/4 horizontal, 8/5 vertical, or 4x5 -> 6x8
@@ -265,62 +213,87 @@ fillcolumn_h54(uint16_t * col, uint32_t * src)
         ofs += EXAMPLE_LCD_H_RES;  // + 4.375
 }
 
-
+// fill one block with scaling up
+// scaler 5/4 horizontal, 8/5 vertical, or 4x5 -> 6x8
+// bgr233 532x300 -> rgb565 798x480
 static void IRAM_ATTR 
-fillcolumn_sparse(uint16_t * col, uint32_t * src)
+fillcolumn_h54_v106(uint16_t * col, uint32_t * src)
 {
     int ofs = 0;
 
+    // column: [0.0, 0.6, 1.2, 1.8, 2.4, 3.0, 3.6, 4.2, 4.8, 5.4]
     uint32_t s4_0 = src[0];
     uint32_t s4_1 = src[BUFCOLUMNS * 1 / 4];
     uint32_t s4_2 = src[BUFCOLUMNS * 2 / 4];
     uint32_t s4_3 = src[BUFCOLUMNS * 3 / 4];
     uint32_t s4_4 = src[BUFCOLUMNS * 4 / 4];
+    uint32_t s4_5 = src[BUFCOLUMNS * 5 / 4];
 
     uint16_t c16_1;
     uint16_t c16_2;
     uint16_t c16_3;
     uint16_t c16_4;
 
-    c16_1 = C8TO16(s4_0 >> 0);
+    // y + 0
+    c16_1 = C8TO16(s4_0 >> 0);      
     c16_2 = C8TO16(s4_0 >> 8);
     c16_3 = C8TO16(s4_0 >> 16);
     c16_4 = C8TO16(s4_0 >> 24);
         // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
-        col[ofs] = c16_1; col[ofs+1] = c16_2;   col[ofs+3] = c16_3;  col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 0
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 1
+    // y + 0.6, y + 1.2
     c16_1 = C8TO16(s4_1 >> 0);
     c16_2 = C8TO16(s4_1 >> 8);
     c16_3 = C8TO16(s4_1 >> 16);
     c16_4 = C8TO16(s4_1 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2;   col[ofs+3] = c16_3;  col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 0.625
-        //col[ofs] = c16_1; col[ofs+1] = c16_2;   col[ofs+3] = c16_3;  col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 1.25
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;   // dst_line = 2
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;   // dst_line = 3
+    // y + 1.8, y + 2.4
     c16_1 = C8TO16(s4_2 >> 0);
     c16_2 = C8TO16(s4_2 >> 8);
     c16_3 = C8TO16(s4_2 >> 16);
     c16_4 = C8TO16(s4_2 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2;   col[ofs+3] = c16_3;  col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 1.875
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 4
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 5
+    // y = 3.0
     c16_1 = C8TO16(s4_3 >> 0);
     c16_2 = C8TO16(s4_3 >> 8);
     c16_3 = C8TO16(s4_3 >> 16);
     c16_4 = C8TO16(s4_3 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2;   col[ofs+3] = c16_3;  col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 2.5
-        //col[ofs] = c16_1; col[ofs+1] = c16_2;   col[ofs+3] = c16_3;  col[ofs+5] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 3.125
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 6
+    // y + 3.6, y + 4.2
     c16_1 = C8TO16(s4_4 >> 0);
     c16_2 = C8TO16(s4_4 >> 8);
     c16_3 = C8TO16(s4_4 >> 16);
     c16_4 = C8TO16(s4_4 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+3] = c16_3; col[ofs+5] = c16_4;
-        //ofs += EXAMPLE_LCD_H_RES;  // + 3.75
-        //col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+3] = c16_3; col[ofs+5] = c16_4;
-        //ofs += EXAMPLE_LCD_H_RES;  // + 4.375
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 7
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 8
+    // y + 4.8, y + 5.4
+    c16_1 = C8TO16(s4_5 >> 0);
+    c16_2 = C8TO16(s4_5 >> 8);
+    c16_3 = C8TO16(s4_5 >> 16);
+    c16_4 = C8TO16(s4_5 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 9
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        //ofs += EXAMPLE_LCD_H_RES;  // dst_line = 10
 }
 
+constexpr int NTUTU = 150;
+static int tutu_i = -1;
+static uint64_t tutu[NTUTU];
+static int tutu_pos_px[NTUTU];
+static int tutu_len_bytes[NTUTU];
+static int tutu_frm = 0;
+static int tutu_frm_reg = 0;
 
 static bool IRAM_ATTR 
 on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px, int len_bytes, void *user_ctx)
@@ -330,28 +303,34 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
 
     if (pos_px == 0) {
         read_buffer_index = 0;
+        if (tutu_i == -1) tutu_i = 0;
+        tutu_frm_reg = tutu_frm;
+        tutu_frm = 0;
     }
+    if (tutu_i >= 0 && tutu_i < NTUTU) {
+            tutu[tutu_i] = esp_timer_get_time();
+            tutu_pos_px[tutu_i] = pos_px;
+            tutu_len_bytes[tutu_i] = len_bytes;
+            ++tutu_i;
+    }
+    tutu_frm++;
 
     uint8_t * buf8 = bounce_buf8[read_buffer_index];
     uint16_t * bounce16 = (uint16_t *)bounce_buf;
 
-
     int border_w = (EXAMPLE_LCD_H_RES - BUFCOLUMNS * 5/4) / 2;
 
     uint8_t * bbuf = static_cast<uint8_t *>(bounce_buf);
-    if (pos_px < EXAMPLE_LCD_H_RES * 8 * 2 || pos_px >= EXAMPLE_LCD_H_RES * (EXAMPLE_LCD_V_RES - 8 * 2)) {
-        memset(bbuf, 0, EXAMPLE_LCD_H_RES * 8 * 2);
-    }
-    else {
-        for (int i = 0; i < 8; ++i) {
-            memset(bbuf, 0, border_w << 1);
-            memset(bbuf + 2 * BUFCOLUMNS * 5/4 + (border_w << 1), 0, (border_w << 1) + 2); // extra pixel because border_w is odd
-            bbuf += EXAMPLE_LCD_H_RES * 2;
-        }
 
-        for (int dst_x = border_w, src_x = 0; dst_x + 5 < EXAMPLE_LCD_H_RES - border_w; dst_x += 5, src_x += 4) {
-            fillcolumn_h54(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
-        }
+    for (int i = 0; i < BOUNCE_NLINES; ++i) {
+        memset(bbuf, 0xff && read_buffer_index, border_w << 1);
+        if (pos_px == 0) memset(bbuf, 0xffff, 16);
+        memset(bbuf + 2 * BUFCOLUMNS * 5/4 + (border_w << 1), 0, (border_w << 1) + 2); // extra pixel because border_w is odd
+        bbuf += EXAMPLE_LCD_H_RES * 2;
+    }
+
+    for (int dst_x = border_w, src_x = 0; dst_x + 5 < EXAMPLE_LCD_H_RES - border_w; dst_x += 5, src_x += 4) {
+        fillcolumn_h54_v106(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
     }
 
     // flip buffers for the next time
@@ -456,6 +435,9 @@ void create_lcd_driver_task(void *pvParameter)
             .vsync_pulse_width = 4,
             .vsync_back_porch = 8,
             .vsync_front_porch = 8,
+            // .vsync_pulse_width = 32,
+            // .vsync_back_porch = 16,
+            // .vsync_front_porch = 16,
             .flags = {
                 .hsync_idle_low = 1,
                 .vsync_idle_low = 1,
@@ -554,13 +536,13 @@ void app_main(void)
     bounce_buf8[0] = &evilbuf[6];
     bounce_buf8[1] = &evilbuf[32768 + 6];
 #else
-    bounce_buf8[0] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 5 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)) + 6; // alignment offset for main screen area
+    bounce_buf8[0] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 6 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)) + 6; // alignment offset for main screen area
     assert(bounce_buf8[0]);
-    bounce_buf8[1] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 5 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)) + 6; // alignment offset for main screen area
+    bounce_buf8[1] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 6 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)) + 6; // alignment offset for main screen area
     assert(bounce_buf8[1]);
 #endif
-    memset(bounce_buf8[0], 0, BUFCOLUMNS * 5 * sizeof(uint8_t));
-    memset(bounce_buf8[1], 0, BUFCOLUMNS * 5 * sizeof(uint8_t));
+    memset(bounce_buf8[0], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
+    memset(bounce_buf8[1], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
     ESP_LOGI(TAG, "Created frame buffers: buf8[0]=%p buf8[1]=%p", bounce_buf8[0], bounce_buf8[1]);
 
     // init scaler task on core 1 to pin scaler to core 1
@@ -592,8 +574,16 @@ void app_main(void)
         // }
         
         if (frame_no % 50 == 0) {
-            printf("fps=%d v06x_fps=%d cycles=%d\n", fps, v06x_fps, (v06x_frame_cycles - last_frame_cycles) / 50);
+            printf("fps=%d v06x_fps=%d cycles=%d cb/frm=%d frame dur=%lluus\n", fps, v06x_fps, (v06x_frame_cycles - last_frame_cycles) / 50, tutu_frm_reg, frameduration_us);
             last_frame_cycles = v06x_frame_cycles;
         }
+        
+        // if (tutu_i == NTUTU) {
+        //         printf("0: len=%d line=%d\n", tutu_len_bytes[0], tutu_pos_px[0]/EXAMPLE_LCD_H_RES);
+        //         for (int i = 1; i < NTUTU; ++i) printf("%2d: t=%lld line=%d l=%d\n", i, tutu[i] - tutu[i-1], tutu_pos_px[i]/EXAMPLE_LCD_H_RES, tutu_len_bytes[i]);
+        //         tutu_i = -1;
+        //         putchar('\n');
+        // }
+
     }
 }
