@@ -5,7 +5,6 @@
 #include "i8080.h"
 #include "filler.h"
 #include "esp_filler.h"
-#include "sound.h"
 #include "tv.h"
 #include "cadence.h"
 #include "breakpoint.h"
@@ -19,12 +18,11 @@ extern "C" unsigned int boots_bin_len;
 
 using namespace i8080cpu;
 
-Board::Board(Memory& _memory, IO& _io, PixelFiller& _filler, Soundnik& _snd,
+Board::Board(Memory& _memory, IO& _io, PixelFiller& _filler, 
   TV& _tv, WavPlayer& _tape_player, Debug& _debug)
   : memory(_memory)
   , io(_io)
   , filler(_filler)
-  , soundnik(_snd)
   , tv(_tv)
   , tape_player(_tape_player)
   , debug(_debug)
@@ -73,8 +71,6 @@ void Board::set_bootrom(const std::vector<uint8_t>& bootbytes)
 
 void Board::reset(Board::ResetMode mode)
 {
-    this->soundnik.reset();
-
     switch (mode) {
         case ResetMode::BLKVVOD:
             if (this->boot.size() == 0) {
@@ -109,6 +105,7 @@ void Board::interrupt(bool on)
     this->inte = on;
     this->irq &= on;
     esp_filler::irq &= on;
+    esp_filler::inte = on;
 }
 
 /* Fuses together inner CPU logic and Vector-06c interrupt logic */

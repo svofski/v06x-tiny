@@ -14,7 +14,6 @@
 #include "options.h"
 #include "keyboard.h"
 #include "8253.h"
-#include "sound.h"
 #include "ay.h"
 #include "wav.h"
 #include "util.h"
@@ -41,27 +40,6 @@ void v06x_init(QueueHandle_t from_scaler, uint8_t * _buf0, uint8_t * _buf1)
     buf1 = _buf1;
 }
 
-void benchmark(Board * board)
-{
-    const unsigned MEASUREMENTS = 50;
-    uint64_t start = esp_timer_get_time();
-
-    for (int retries = 0; retries < MEASUREMENTS; retries++) {
-        board->esp_freewheel_until_top();
-
-        board->esp_execute_five();
-        for (int i = 2; i < 60; ++i) {
-            board->esp_execute_five();
-        }
-
-    }
-
-    uint64_t end = esp_timer_get_time();
-
-    printf("%u iterations took %llu milliseconds (%llu microseconds per invocation)\n",
-           MEASUREMENTS, (end - start)/1000, (end - start)/MEASUREMENTS);
-}    
-
 void benchmark_bob(Board * board)
 {
     const unsigned MEASUREMENTS = 50;
@@ -75,24 +53,33 @@ void benchmark_bob(Board * board)
            MEASUREMENTS, (end - start)/1000, (end - start)/MEASUREMENTS);
 }    
 
-
-void test_loop(Board * board)
+void benchmark_vi53(I8253 * vi53)
 {
-    for (int retries = 0; retries < 2; retries++) {
-        printf("0 raster_line=%d buffer=%d\n", esp_filler::raster_line, esp_filler::write_buffer);
-        board->esp_freewheel_until_top();
-        printf("1 raster_line=%d buffer=%d\n", esp_filler::raster_line, esp_filler::write_buffer);
+    const unsigned MEASUREMENTS = 312 * 50 * 30; // 30 seconds
 
-        board->esp_execute_five();
-        for (int i = 2; i < 60; ++i) {
-            board->esp_execute_five();
-            printf("2 raster_line=%d buffer=%d\n", esp_filler::raster_line, esp_filler::write_buffer);
-        }
+    uint64_t start = esp_timer_get_time();
 
-        printf("3 raster_line=%d buffer=%d\n", esp_filler::raster_line, esp_filler::write_buffer);
+    vi53->write(3, 0x36); // 00 11 011 0
+    vi53->write(0, (130)&255);
+    vi53->write(0, (130)>>8);
+
+    // vi53->write(0, (96*4)&255);
+    // vi53->write(0, (96*4)>>8);
+
+    // vi53->write(3, 0x76); 
+    // vi53->write(1, (96*5)&255); 
+    // vi53->write(1, (96*5)>>8); 
+
+    // vi53->write(3, 0xb6); 
+    // vi53->write(2, (96*6)&255); 
+    // vi53->write(2, (96*6)>>8); 
+
+    for (int retries = 0; retries < MEASUREMENTS; retries++) {
+        vi53->count_clocks(96);
     }
+    uint64_t end = esp_timer_get_time();
+    printf("TIMER (mode 3) %u clocks took %llu microseconds\n", MEASUREMENTS, end - start);
 }    
-
 
 void v06x_task(void *param)
 {
@@ -117,11 +104,9 @@ void v06x_task(void *param)
     WavPlayer* tape_player = new WavPlayer(*wav);
     Keyboard* keyboard = new Keyboard();
     I8253* timer = new I8253();
-    TimerWrapper* tw = new TimerWrapper(*timer);
     AY* ay = new AY();
     AYWrapper* aw = new AYWrapper(*ay);
 
-    Soundnik* soundnik = new Soundnik(*tw, *aw);
     IO* io = new IO(*memory, *keyboard, *timer, *fdc, *ay, *tape_player, esp_filler::palette8());
     TV* tv = new TV();
     
@@ -129,20 +114,19 @@ void v06x_task(void *param)
     PixelFiller* filler = new PixelFiller(*memory, *io, *tv);
     ESP_LOGI(TAG, "PixelFiller: %p sizeof()=%u", filler, sizeof(PixelFiller));
 
-    esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1);
+    esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer);
     esp_filler::frame_start();
 
     //filler = reinterpret_cast<PixelFiller *>(heap_caps_realloc(filler, sizeof(PixelFiller), MALLOC_CAP_SPIRAM));
     //ESP_LOGI(TAG, "PixelFiller: moved to internal DRAM: %p", filler);
 
-    Board* board = new Board(*memory, *io, *filler, *soundnik, *tv, *tape_player, *debug);
+    Board* board = new Board(*memory, *io, *filler, *tv, *tape_player, *debug);
 
     ESP_LOGI(TAG, "Board: %p", board);
 
 #if 1
 
     filler->init();
-    soundnik->init(0);    // this may switch the audio output off
     tv->init();
     board->init();
     fdc->init();
@@ -169,12 +153,57 @@ void v06x_task(void *param)
 
     board->reset(Board::ResetMode::BLKVVOD);
 
-    benchmark_bob(board);
+    // benchmark_bob(board);
+    benchmark_vi53(timer);
     //benchmark(board);
     //test_loop(board);
 
+#define SHOP_MODE 1
+#if SHOP_MODE
     esp_filler::bob(50);
 
+    struct romset_t {
+        const uint8_t * rom;
+        size_t len;
+        int nframes;
+    };
+
+    romset_t romset[] = {
+        {&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
+        // -- mostly ok but no picture {&ROM(cronex)[0], ROMLEN(cronex), 60 * 50},
+        // -- weird sound, no picture {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
+        // -- some noises, bolderm has something similar as well -- trtrtrtr in the next program
+        //{&ROM(spsmerti)[0], ROMLEN(spsmerti), 45 * 50},
+        // {&ROM(wave)[0], ROMLEN(wave), 75 * 50},
+        {&ROM(progdemo)[0], ROMLEN(progdemo), 120 * 50},
+        {&ROM(mclrs)[0], ROMLEN(mclrs), 4 * 50},
+        {&ROM(tiedye2)[0], ROMLEN(tiedye2), 4 * 50},
+        {&ROM(kittham1)[0], ROMLEN(kittham1), 4 * 50},
+        {&ROM(clrspace)[0], ROMLEN(clrspace), 4 * 50},
+        {&ROM(oblitterated)[0], ROMLEN(oblitterated), 2 * 60 * 50},
+        {&ROM(arzak)[0], ROMLEN(arzak), 2 * 60 * 50},
+        {&ROM(s8snail)[0], ROMLEN(s8snail), 50 * 50},
+        {&ROM(bord)[0], ROMLEN(bord), 10 * 50},
+        {&ROM(bord2)[0], ROMLEN(bord2), 10 * 50},
+        {&ROM(bazis)[0], ROMLEN(bazis), 60 * 50},
+        {&ROM(sunsetb)[0], ROMLEN(sunsetb), 30 * 50},
+        {&ROM(hscroll)[0], ROMLEN(hscroll), 10 * 50},
+    };
+
+    for (int ri = 0;;) {
+        board->reset(Board::ResetMode::BLKVVOD);
+        //timer->reset();
+        esp_filler::bob(50);
+        for (size_t i = 0; i < romset[ri].len; ++i) {
+            memory->write(256 + i, romset[ri].rom[i], false);
+        }
+        board->reset(Board::ResetMode::BLKSBR);
+        printf("loaded rom %d, running %d frames ", ri, romset[ri].nframes);
+        esp_filler::bob(romset[ri].nframes);
+
+        if (++ri == sizeof(romset)/sizeof(romset[0])) ri = 0;
+    }
+#endif
     // for (size_t i = 0; i < tiedye2_rom_len; ++i) {
     //     memory->write(256 + i, tiedye2_rom[i], false);
     // }
@@ -193,9 +222,9 @@ void v06x_task(void *param)
     // for (size_t i = 0; i < ROMLEN(s8snail); ++i) {
     //     memory->write(256 + i, ROM(s8snail)[i], false);
     // }
-    for (size_t i = 0; i < ROMLEN(bord); ++i) {
-        memory->write(256 + i, ROM(bord)[i], false);
-    }
+    // for (size_t i = 0; i < ROMLEN(bord); ++i) {
+    //     memory->write(256 + i, ROM(bord)[i], false);
+    // }
     // for (size_t i = 0; i < ROMLEN(bord2); ++i) {
     //     memory->write(256 + i, ROM(bord2)[i], false);
     // }
@@ -212,8 +241,8 @@ void v06x_task(void *param)
     //     memory->write(256 + i, ROM(hscroll)[i], false);
     // }
 
-    printf("loaded oblitterated\n");
-    board->reset(Board::ResetMode::BLKSBR);
+    // printf("loaded oblitterated\n");
+    // board->reset(Board::ResetMode::BLKSBR);
 
     //esp_filler::bob(7);
     //i8080cpu::trace_enable = 1;

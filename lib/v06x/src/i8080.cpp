@@ -37,6 +37,9 @@
 
 #include "esp_attr.h"
 
+// if enabled, call i8080_hal_io_output before the next i8080_execute()
+#define I8080_OUT_DELAYED  1
+
 #define RD_BYTE(addr) i8080_hal_memory_read_byte(addr)
 #define RD_OPCODE(addr) i8080_hal_memory_read_byte(addr, true)
 #define RD_WORD(addr) i8080_hal_memory_read_word(addr,false)
@@ -288,6 +291,11 @@ static uns8 carry, add;
 DRAM_ATTR
 uns8 last_opcode;
 
+#if I8080_OUT_DELAYED
+DRAM_ATTR
+static int delayed_out_port;
+#endif
+
 DRAM_ATTR
 uint8_t parity_table[] = {
     1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 1,
@@ -325,6 +333,9 @@ void i8080_init(void) {
     UN5_FLAG = 0;
 
     PC = 0;
+    #if I8080_OUT_DELAYED
+    delayed_out_port = -1;
+    #endif
 }
 
 IRAM_ATTR
@@ -352,7 +363,14 @@ int trace_enable = 0;
 
 IRAM_ATTR
 int i8080_execute(int opcode) {
-    if (trace_enable) printf("pc=%04x i=%02x A=%02x BC=%04x\n", PC, opcode, A, BC);
+    #if I8080_OUT_DELAYED
+    if (delayed_out_port >= 0) {
+        i8080_hal_io_output(delayed_out_port, A);
+        delayed_out_port = -1;
+    }
+    #endif
+
+    //if (trace_enable) printf("pc=%04x i=%02x A=%02x BC=%04x\n", PC, opcode, A, BC);
     int cpu_cycles; (void)cpu_cycles;
     int v_cycles;
     switch (opcode) {
@@ -1664,7 +1682,11 @@ int i8080_execute(int opcode) {
         case 0xD3:            /* out port8 */
             cpu_cycles = 10;
             v_cycles = 12;
+            #if I8080_OUT_DELAYED
+            delayed_out_port = RD_BYTE(PC++);
+            #else
             i8080_hal_io_output(RD_BYTE(PC++), A);
+            #endif
             break;
 
         case 0xD4:            /* cnc addr */

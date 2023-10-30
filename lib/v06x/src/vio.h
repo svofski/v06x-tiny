@@ -308,7 +308,7 @@ public:
     void commit() 
     {
         if (this->outport != -1) {
-            //printf("commit: %02x = %02x\n", this->outport, this->outbyte);
+            //if (this->outport < 16)  printf("io::commit: %02x = %02x\n", this->outport, this->outbyte);
             this->realoutput(this->outport, this->outbyte);
             this->outport = this->outbyte = -1;
         }

@@ -3,6 +3,7 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 add_compile_definitions(WITHOUT_COREDSP)
 
 include_directories(lib/v06x/src)
+list(APPEND EXTRA_COMPONENT_DIRS components/pwm_audio)
 project(paneltest)
 
 

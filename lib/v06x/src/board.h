@@ -10,7 +10,6 @@
 #endif
 #include "i8080.h"
 #include "filler.h"
-#include "sound.h"
 #include "tv.h"
 #include "cadence.h"
 #include "breakpoint.h"
@@ -50,7 +49,6 @@ class Board
     Memory& memory;
     IO& io;
     PixelFiller& filler;
-    Soundnik& soundnik;
     TV& tv;
     WavPlayer& tape_player;
     Debug& debug;
@@ -86,7 +84,7 @@ class Board
     void init_bootrom(const uint8_t* src, size_t size);
 
   public:
-    Board(Memory& _memory, IO& _io, PixelFiller& _filler, Soundnik& _snd,
+    Board(Memory& _memory, IO& _io, PixelFiller& _filler, 
       TV& _tv, WavPlayer& _tape_player, Debug& _debug);
 
     void init();
@@ -105,7 +103,6 @@ class Board
 
     void toggle_fullscreen() { tv.toggle_fullscreen(); }
     void render_frame(const int frame, const bool executed);
-    void pause_sound(bool topause) { soundnik.pause((int)topause); }
     int execute_frame_with_cadence(bool update_screen, bool use_cadence);
     void single_step(bool update_screen);
     
@@ -116,7 +113,6 @@ class Board
     int esp_carry_cycles;
 
     TV& get_tv() const { return tv; }
-    Soundnik& get_soundnik() const { return soundnik; }
 
   public:
     auto read_stack(const size_t _len) const -> std::vector<uint16_t>;

@@ -1,5 +1,6 @@
 #include <cstdint>
 #include "vio.h"
+#include "8253.h"
 
 namespace esp_filler {
     constexpr int center_offset = DEFAULT_CENTER_OFFSET;
@@ -11,10 +12,11 @@ namespace esp_filler {
 
     extern int raster_line;
     extern int irq;
+    extern int inte;
     extern int write_buffer;
 
     uint16_t * palette8();    
-    void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2);
+    void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * vi53);
     void frame_start();
     int fill(int ncycles, int commit_time, int commit_time_pal);
     int fill_noout(int ncycles);

@@ -9,14 +9,22 @@
 #include "esp_attr.h"
 #include <cstdint>
 
+#include "../../../main/params.h"
 #include "globaldefs.h"
 #include "vio.h"
 #include "esp_filler.h"
 #include "i8080.h"
 
+
 extern QueueHandle_t scaler_to_emu;
 extern int v06x_framecount;
 extern int v06x_frame_cycles;
+
+extern QueueHandle_t audio_queue;
+int audiobuf_index;
+extern int16_t * audio_pp[AUDIO_NBUFFERS];
+int16_t * audio_buf;
+
 
 #define TIMED_COMMIT
 
@@ -74,7 +82,7 @@ int fb_row;
 int vborder;
 int visible;
 int mode512;
-int border_index;
+volatile int border_index;
 int fiveline_count;
 #ifndef TIMED_COMMIT
 int color_index;    // index of color at the tip of the beam
@@ -82,22 +90,27 @@ int color_index;    // index of color at the tip of the beam
 
 #ifdef TIMED_COMMIT
 bool commit_pal;
+int commit_io;
 #endif
 
 IO * io;
+I8253 * vi53;
 
 // palette ram
 uint16_t py2[16];
 
-void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2)
+void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _vi53)
 {
     mem32 = &_mem32[0x2000]; // pre-offset 
     io = _io;
     buffers[0] = buf1;
     buffers[1] = buf2;
-    write_buffer = 0;
+    write_buffer = 0;    
     bmp.bmp8 = buffers[0];
     fiveline_count = 0;        // count groups of 5 lines
+
+    audiobuf_index = 0;
+    audio_buf = audio_pp[audiobuf_index];
 
     io->onborderchange = [](int border) {
         border_index = border;
@@ -106,6 +119,8 @@ void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2)
     io->onmodechange = [](bool mode) {
         mode512 = mode;
     };
+
+    vi53 = _vi53;
 
     inte = 0;
 }
@@ -198,9 +213,12 @@ inline void slab8_pal()
         uint8_t i4 = shiftNicePixels(nicepixels);
         *bmp.bmp16++ = py2[i1];
         *bmp.bmp16++ = py2[i2];
+        if (commit_pal) io->commit_palette(i2); 
         // // if we commit with i2 here, the 8bit snail flickers, clrspace is good
         // // with i1: 8bit snail is good, clrspace is broken
-        if (commit_pal) io->commit_palette(i2); 
+        if (commit_io && --commit_io == 0) {
+            io->commit();
+        }
         *bmp.bmp16++ = py2[i3];
         *bmp.bmp16++ = py2[i4];
     }
@@ -219,42 +237,47 @@ inline void slab8_pal()
 }
 #endif
 
+// full column slab in the vertical border area
 IRAM_ATTR
 void vborderslab()
 {
     uint32_t c = py2[border_index];
-    //c = 0xc71f;
-    c = c << 16 | c;
     *bmp.bmp32++ = c << 16 | c;
-    *bmp.bmp32++ = c << 16 | c;
-    *bmp.bmp32++ = c << 16 | c;
-    #ifdef TIMED_COMMIT
     if (commit_pal) {
         io->commit_palette(border_index);
-        uint32_t c = py2[border_index];
-        c = c << 16 | c;
+        c = py2[border_index];
     }
-    #endif
+    *bmp.bmp32++ = c << 16 | c;
+    if (commit_io && --commit_io == 0) {
+        io->commit();
+        c = py2[border_index];
+    }
+    *bmp.bmp32++ = c << 16 | c;
     *bmp.bmp32++ = c << 16 | c;
 }
 
-
+// an edge border slab, to be eliminated in favour of full width border later
+IRAM_ATTR
 void borderslab()
 {
     uint16_t c = py2[border_index];
-    c = (c << 8) | c;
-    *bmp.bmp16++ = c;
-    *bmp.bmp32++ = c << 16 | c;
-    #ifdef TIMED_COMMIT
     if (commit_pal) {
         io->commit_palette(border_index);
-        uint32_t c = py2[border_index];
-        c = c << 16 | c;
+        c = py2[border_index];
+    }
+    *bmp.bmp16++ = c;
+    #ifdef TIMED_COMMIT
+    if (commit_io && --commit_io == 0) {
+        io->commit();
+        c = py2[border_index];
     }
     #endif
     *bmp.bmp32++ = c << 16 | c;
+    *bmp.bmp32++ = c << 16 | c;
 }
 
+int rpixels;
+int last_rpixels;
 
 IRAM_ATTR
 int bob(int maxframes)
@@ -278,36 +301,33 @@ int bob(int maxframes)
 
     // make buffer full width, not 532 but 768 pixels wide
 
+    // timer works at 1.5mhz, 1/8 pixel clock
+    // 768/8 = 96 timer clocks per line, or 2 timer clocks per column```````````
+
     // filling the void: no reason to count individual pixels in this area
-    int rpixels = 0;
+    rpixels = last_rpixels = 0;
     int ipixels = 0; 
 
     ///int commit_time = 0, commit_time_pal = 0;
     int line6 = 0;
 
-    printf("buffers[0]=%p buffers[0].10=%p  buffers[1]=%p buffers[0].10=%p\n", buffers[0], buffers[0]+10, buffers[1], buffers[1]+10);
+    //printf("buffers[0]=%p buffers[0].10=%p  buffers[1]=%p buffers[0].10=%p\n", buffers[0], buffers[0]+10, buffers[1], buffers[1]+10);
 
     for(int frm = 0; maxframes == 0 || frm < maxframes; ++frm) {
         write_buffer = 0;
         bmp.bmp8 = buffers[write_buffer];
         line6 = 6;
-        int rpixel0 = rpixels;
 
         //printf("frame %d\n", frm);
         // frame counted in 16-pixel chunks
         // 768/16 = 48, 0x30 -> next line when i & 0x3f == 0x30
         for (int line = 0; line < 312; ++line) {
-            if (line == 40) {
-                fb_row = io->ScrollStart(); 
-            }
-
             int column;
             bool line_is_visible = line >= first_visible_line && line <= last_visible_line;
-
             // invisible 
             if (!line_is_visible) {
                 for (column = 0; column < 48; ++column) {
-                    if (line == 0 && column == 12) {
+                    if (line == 0 && column == 9) {
                         irq = inte;
                     }
                     if (ipixels <= rpixels) [[unlikely]] {
@@ -324,6 +344,9 @@ int bob(int maxframes)
                         ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                         #ifdef TIMED_COMMIT
                         if (commit_pal) io->commit_palette(border_index);
+                        if (commit_io && --commit_io == 0) {
+                            io->commit();
+                        }
                         #endif
                         irq = false;
                     }
@@ -331,6 +354,13 @@ int bob(int maxframes)
                     color_index = border_index; // important for commit palette
                     #endif
                     rpixels += 4;
+
+                    if (column == 24) {
+                        // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
+                        vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
+                        last_rpixels = rpixels;
+                        *audio_buf++ = vi53->out_sum() << 10;   // sample audio
+                    }
                 }
                 goto rowend;
             }
@@ -344,30 +374,32 @@ int bob(int maxframes)
             // visible but no raster, vertical border
             if (line < first_raster_line || line >= last_raster_line) {  
                 for (column = 0; column < 48; ++column) {
+                    #if DEBUG_INSTRUCTION_STRIPES
                     bool xoxo = false;
+                    #endif
                     if (ipixels <= rpixels) [[unlikely]] {
                         #ifdef TIMED_COMMIT
                         commit_pal = false;
                         #endif
                         //if (i8080cpu::trace_enable) printf("c=%d rpixel=%d ", column, rpixels - rpixel0);
                         ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+                        #if DEBUG_INSTRUCTION_STRIPES
                         xoxo = true;
+                        #endif
                     }
                     #ifndef TIMED_COMMIT
                     color_index = border_index;
                     #endif
                     if (column >= 10 && column < 42) {
                         vborderslab();
+                        #if DEBUG_INSTRUCTION_STRIPES
                         if (xoxo) {
-                            if (i8080cpu::last_opcode == 0x76) 
-                            {
-                                // if (frm == 150) {
-                                //     printf("hlt @%d/%d ", line, write_buffer);
-                                // }
+                            if (i8080cpu::last_opcode == 0x76) {
                                 *(bmp.bmp8 - 16) = write_buffer ? (0x07<<3) : 0xc0;
                             } else
                                 *(bmp.bmp8 - 16) = 0x07;
                         }
+                        #endif
                     }
                     else if (column == 9 || column == 42) {
                         borderslab();
@@ -375,9 +407,20 @@ int bob(int maxframes)
                     else {
                         #ifdef TIMED_COMMIT
                         if (commit_pal) io->commit_palette(border_index);
+                        if (commit_io && --commit_io == 0) {
+                            io->commit();
+                        }
                         #endif
                     }
                     rpixels += 4;
+
+                    if (column == 24) {
+                        // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
+                        vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
+                        last_rpixels = rpixels;
+                        *audio_buf++ = vi53->out_sum() << 10;   // sample audio
+                    }
+
                 }
                 goto rowend;
             }
@@ -398,31 +441,38 @@ int bob(int maxframes)
                 #endif
                 rpixels += 4;
             }
+
+            if (line == 40) {
+                fb_row = io->ScrollStart(); 
+            }
+
             borderslab();
             fb_column = -1;
             /// COLUMNS 10...41
             for (; column < 42; ++column) {
-                //bool xoxo = false;
                 // (4, 8, 12, 16, 20, 24) * 4
                 if (ipixels <= rpixels) [[unlikely]] {
                     #ifdef TIMED_COMMIT
                     commit_pal = false;
                     #endif
                     ipixels += i8080cpu::i8080_instruction(); // divisible by 4
-                    //xoxo = true;
                 }
 
                 //?color_index = border_index; // important for commit palette
                 ++fb_column;
                 #ifdef TIMED_COMMIT
                 slab8_pal();
-                // if (xoxo) {
-                //     *bmp.bmp16 = 0xf81f;
-                // }                
                 #else
                 slab8();        // will update color_index
                 #endif
                 rpixels += 4;
+
+                if (column == 24) {
+                    // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
+                    vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
+                    last_rpixels = rpixels;
+                    *audio_buf++ = vi53->out_sum() << 10;   // sample audio
+                }
             }
 
             // COLUMN 42: right edge of the bitplane area
@@ -447,6 +497,9 @@ int bob(int maxframes)
                     ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                     #ifdef TIMED_COMMIT
                     if (commit_pal) io->commit_palette(border_index);
+                    if (commit_io && --commit_io == 0) {
+                        io->commit();
+                    }
                     #endif
                 }
                 #ifndef TIMED_COMMIT
@@ -463,29 +516,28 @@ rowend:
             }
 
             if (--line6 == 0) {
-                //if (frm == 150) {
-                //    printf("line=%d wrbuf=%d\n", line, write_buffer);
-                //}
                 write_buffer ^= 1;
                 bmp.bmp8 = buffers[write_buffer];
                 line6 = 6;
 
-                // don't sync after filling line 311 (last_visible_line = 312)
-                // line = 0, 6, 12, 18, 24, 30...
-                // wr     0  1  0   1   0   1
-                // first visible buffer is 24..29
-                // line = 5:coast, 11: coast, 17: coast, 23: coast, 29: sync with pos_px = 0
-                if (line > first_visible_line && line < last_visible_line) {
+                if (line > first_visible_line) {// && line < last_visible_line) {
                     int pos_px;
                     do {
                         xQueueReceive(::scaler_to_emu, &pos_px, portMAX_DELAY);
-                        //if (frm == 151 && (line == first_visible_line + 6 - 1)) printf("line=%d pos_px=%d", line, pos_px);
-                        //if (frm == 100 && line == 311 - 6) printf("line=%d pos_px/800=%d", line, pos_px/800);
                     } while (line == first_visible_line + 6 - 1 && pos_px != 0);
-                    //} while (line == 311 - 6 && pos_px != 800 * 470);
                 }
             }
+
+            // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
+            vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
+            last_rpixels = rpixels;
+            *audio_buf++ = vi53->out_sum() << 10;   // sample audio
         }
+
+        // post audio buffer index to be taken in by the audio driver
+        xQueueSend(::audio_queue, &audiobuf_index,  5 / portTICK_PERIOD_MS);
+        if (++audiobuf_index == AUDIO_NBUFFERS) audiobuf_index = 0;
+        audio_buf = audio_pp[audiobuf_index];
 
         ++v06x_framecount;
         v06x_frame_cycles = ipixels;
@@ -502,19 +554,38 @@ uint16_t * palette8()
 }
 
 
+// as per v06x:
+//   port 2 commit time: 8 * 4 (32 pixels)
+//   port c commit time: ?     (12 pixels)
+
+// new idea:
+//   i8080 doesn't hal out out instruction until the next one -- that's fairly close to the real thing
+//   commit of all ports except 02 is immediate
+//   commit to port 2 is delayed by ~ 1 column
 IRAM_ATTR
 void i8080_hal_io_output(int port, int value)
 {
-    //printf("output port %02x=%02x\n", port, value);
+    //if (port < 16) printf("output port %02x=%02x\n", port, value);
     esp_filler::io->output(port, value);
     #ifndef TIMED_COMMIT    
     esp_filler::io->commit_palette(0x0f & esp_filler::color_index);
     #else
-    if (port >= 0xc && port <= 0xf) {
-        esp_filler::commit_pal = true;
+    if (port <= 0xb) {
+        esp_filler::io->commit();           // all regular peripherals
+
+        if (port > 0x08) {  // timer
+            esp_filler::vi53->count_clocks((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
+            esp_filler::last_rpixels = esp_filler::rpixels;
+        }
+    }
+    else if (port >= 0xc && port <= 0xf) {
+        esp_filler::commit_pal = true;      // near-instant
+    }
+    else {
+        esp_filler::commit_io = 2;          // border updates with delay
     }
     #endif
-    esp_filler::io->commit();
+    //esp_filler::io->commit();
 }
 
 void i8080_hal_iff(int on)

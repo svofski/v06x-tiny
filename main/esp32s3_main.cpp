@@ -24,15 +24,25 @@
 
 #include "v06x_main.h"
 
+#include "params.h"
 
-#define SCALER_CORE 1
-#define EMU_CORE 0
+#if WITH_PWM_AUDIO
+#include "pwm_audio.h"
+#endif
+
+#if WITH_I2S_AUDIO
+#include "driver/i2s_std.h"
+#include "driver/gpio.h"
+#endif
 
 #define CONFIG_EXAMPLE_AVOID_TEAR_EFFECT_WITH_SEM 1
 #define CONFIG_EXAMPLE_USE_BOUNCE_BUFFER 1
 #define CONFIG_BOUNCE_ONLY 1
 #define BOUNCE_NLINES 10 // 288 * 10/6: scale up 6 lines to 10
 #define SCALE85 1
+
+#define FULLBUFFER 0        // use full-screen buffer
+#define DOUBLE_FB 1         // double-buffered buffer
 
 const char *TAG = "v06x";
 
@@ -83,14 +93,15 @@ const char *TAG = "v06x";
 #define EXAMPLE_LCD_H_RES              800
 #define EXAMPLE_LCD_V_RES              480
 
-#if CONFIG_EXAMPLE_DOUBLE_FB
-#define EXAMPLE_LCD_NUM_FB             2
+#if FULLBUFFER
+#if DOUBLE_FB
+#define LCD_NUM_FB             2
 #else
-#define EXAMPLE_LCD_NUM_FB             1
-#endif // CONFIG_EXAMPLE_DOUBLE_FB
-
-#define EXAMPLE_LVGL_TICK_PERIOD_MS    2
-
+#define LCD_NUM_FB             1
+#endif
+#else
+#define LCD_NUM_FB 0
+#endif
 
 
 #define BUFCOLUMNS 532 // EXAMPLE_LCD_H_RES
@@ -104,8 +115,9 @@ const char *TAG = "v06x";
 SemaphoreHandle_t sem_vsync_end;
 SemaphoreHandle_t sem_gui_ready;
 
-//SemaphoreHandle_t sem_emu_request;     // scaler to emulator: request next 5 lines
+// scaler to emulator: request next 6 lines
 QueueHandle_t scaler_to_emu;
+QueueHandle_t audio_queue;
 
 volatile extern int v06x_framecount;
 volatile int framecount = 0;
@@ -120,8 +132,16 @@ volatile uint64_t lastframe_us = 0;
 volatile uint64_t frameduration_us = 0;
 
 
+
+
+#if(FULLBUFFER)
+void * scaler_buf[2];
+#else
 uint32_t read_buffer_index;
 uint8_t * bounce_buf8[2];
+#endif
+
+int16_t * audio_pp[AUDIO_NBUFFERS];
 
 // this is pointless because everything is global here
 typedef struct user_context_ {
@@ -323,8 +343,12 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
     uint8_t * bbuf = static_cast<uint8_t *>(bounce_buf);
 
     for (int i = 0; i < BOUNCE_NLINES; ++i) {
+        #ifdef DEBUG_BOUNCE_BUFFERS
         memset(bbuf, 0xff && read_buffer_index, border_w << 1);
         if (pos_px == 0) memset(bbuf, 0xffff, 16);
+        #else
+        memset(bbuf, 0, border_w << 1);
+        #endif
         memset(bbuf + 2 * BUFCOLUMNS * 5/4 + (border_w << 1), 0, (border_w << 1) + 2); // extra pixel because border_w is odd
         bbuf += EXAMPLE_LCD_H_RES * 2;
     }
@@ -447,7 +471,7 @@ void create_lcd_driver_task(void *pvParameter)
             }
         },
         .data_width = 16, // RGB565 in parallel mode, thus 16bit in width
-        .num_fbs = 0, //EXAMPLE_LCD_NUM_FB,
+        .num_fbs = LCD_NUM_FB,
 #if CONFIG_EXAMPLE_USE_BOUNCE_BUFFER
         .bounce_buffer_size_px = BOUNCE_NLINES * EXAMPLE_LCD_H_RES,
 #endif
@@ -479,7 +503,15 @@ void create_lcd_driver_task(void *pvParameter)
         .flags = {
             .refresh_on_demand = false,
             .fb_in_psram = true, // allocate frame buffer in PSRAM
+            #if (FULLBUFFER)
+            #if (DOUBLE_FB)
+            .double_fb = 1,
+            #else
+            .double_fb = 0,
+            #endif
+            #else
             .no_fb = true,
+            #endif
         },
     };
     ESP_ERROR_CHECK(esp_lcd_new_rgb_panel(&panel_config, &panel_handle));
@@ -507,9 +539,99 @@ void create_lcd_driver_task(void *pvParameter)
     };
     ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(panel_handle, &cbs, &user_context));
 
+#if(FULLBUFFER)
+    ESP_ERROR_CHECK(esp_lcd_rgb_panel_get_frame_buffer(panel_handle, 2, &scaler_buf[0], &scaler_buf[1]));
+#endif
+
     xSemaphoreGive(sem_vsync_end);
     vTaskDelete(NULL);
 }
+
+
+
+#if WITH_PWM_AUDIO
+IRAM_ATTR
+void audio_task(void *unused)
+{
+    size_t written;
+
+    // PWM Audio Init
+    pwm_audio_config_t pac;
+    pac.duty_resolution    = LEDC_TIMER_8_BIT;
+    pac.gpio_num_left      = SPEAKER_PIN;
+    pac.ledc_channel_left  = LEDC_CHANNEL_0;
+    pac.gpio_num_right     = -1;
+    pac.ledc_channel_right = LEDC_CHANNEL_1;
+    pac.ledc_timer_sel     = LEDC_TIMER_0;
+    pac.tg_num             = TIMER_GROUP_0;
+    pac.timer_num          = TIMER_0;
+    pac.ringbuf_len        = /* 1024 * 8;*/ /*2560;*/ 2880;
+
+    pwm_audio_init(&pac);
+    pwm_audio_set_param(AUDIO_SAMPLERATE, LEDC_TIMER_8_BIT, 1);
+    pwm_audio_start();
+    pwm_audio_set_volume(aud_volume);
+
+    while(1) {
+        int num, written;
+        xQueueReceive(audio_queue, &num, portMAX_DELAY);
+        pwm_audio_write(audio_pp[num], AUDIO_SAMPLES_PER_FRAME, &written, 10 / portTICK_PERIOD_MS);
+    }
+}
+#endif
+
+
+#if WITH_I2S_AUDIO
+IRAM_ATTR
+void audio_task(void *unused)
+{
+    i2s_chan_handle_t tx_handle;
+    /* Get the default channel configuration by the helper macro.
+    * This helper macro is defined in `i2s_common.h` and shared by all the I2S communication modes.
+    * It can help to specify the I2S role and port ID */
+    i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    /* Allocate a new TX channel and get the handle of this channel */
+    ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &tx_handle, NULL));
+
+    /* Setting the configurations, the slot configuration and clock configuration can be generated by the macros
+    * These two helper macros are defined in `i2s_std.h` which can only be used in STD mode.
+    * They can help to specify the slot and clock configurations for initialization or updating */
+    i2s_std_config_t std_cfg = {
+        .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(AUDIO_SAMPLERATE),
+        .slot_cfg = I2S_STD_MSB_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO),
+        .gpio_cfg = {
+            .mclk = I2S_GPIO_UNUSED,
+            .bclk = (gpio_num_t)I2S_BCLK,
+            .ws = (gpio_num_t)I2S_LRC,
+            .dout = (gpio_num_t)I2S_DOUT,
+            .din = I2S_GPIO_UNUSED,
+            .invert_flags = {
+                .mclk_inv = false,
+                .bclk_inv = false,
+                .ws_inv = false,
+            },
+        },
+    };
+    /* Initialize the channel */
+    ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle, &std_cfg));
+
+    /* Before writing data, start the TX channel first */
+    ESP_ERROR_CHECK(i2s_channel_enable(tx_handle));
+    ESP_LOGI(TAG, "Created I2S channel and started audio task");
+    while(1) {
+        int num;
+        size_t written;
+        xQueueReceive(audio_queue, &num, portMAX_DELAY);
+        #ifdef CLEAN_BEEP_TEST
+        for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
+            audio_pp[num][i] = ((i / 12) & 1) << 13;
+        }
+        #endif
+        i2s_channel_write(tx_handle, audio_pp[num], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 5 / portTICK_PERIOD_MS);
+        //printf("audio: buf %d -> %u\n", num, written);
+    }
+}
+#endif
 
 extern "C"
 void app_main(void)
@@ -519,9 +641,8 @@ void app_main(void)
     assert(sem_vsync_end);
     sem_gui_ready = xSemaphoreCreateBinary();
     assert(sem_gui_ready);
-    //sem_emu_request = xSemaphoreCreateBinary();
-    //assert(sem_emu_request);
     scaler_to_emu = xQueueCreate(2, sizeof(int));
+    audio_queue = xQueueCreate(AUDIO_NBUFFERS, sizeof(int));
 
     gpio_config_t bk_gpio_config = {
         .pin_bit_mask = 1ULL << EXAMPLE_PIN_NUM_BK_LIGHT,
@@ -529,6 +650,9 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
     gpio_set_level(static_cast<gpio_num_t>(EXAMPLE_PIN_NUM_BK_LIGHT), EXAMPLE_LCD_BK_LIGHT_OFF_LEVEL);
+
+
+#if(!FULLBUFFER)
 
 #ifdef BOUNCE_BUFFERS_APART
     // make a large gap between bounce buffers,  hoping that they are in different banks
@@ -544,6 +668,12 @@ void app_main(void)
     memset(bounce_buf8[0], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
     memset(bounce_buf8[1], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
     ESP_LOGI(TAG, "Created frame buffers: buf8[0]=%p buf8[1]=%p", bounce_buf8[0], bounce_buf8[1]);
+#endif
+
+    for (int i = 0; i < AUDIO_NBUFFERS; ++i) {
+        audio_pp[i] = static_cast<int16_t *>(heap_caps_malloc(AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, MALLOC_CAP_INTERNAL));
+        assert(audio_pp[i]);
+    }
 
     // init scaler task on core 1 to pin scaler to core 1
     xTaskCreatePinnedToCore(&create_lcd_driver_task, "lcd_init_task", 1024*4, NULL, configMAX_PRIORITIES - 1, NULL, SCALER_CORE);
@@ -553,16 +683,15 @@ void app_main(void)
     ESP_LOGI(TAG, "Turn on LCD backlight");
     gpio_set_level(static_cast<gpio_num_t>(EXAMPLE_PIN_NUM_BK_LIGHT), EXAMPLE_LCD_BK_LIGHT_ON_LEVEL);
 
-    //fill_buf8(user_context.buf8);
     vTaskDelay(pdMS_TO_TICKS(500));
 
+    xTaskCreatePinnedToCore(&audio_task, "audio task", 1024*4, NULL, configMAX_PRIORITIES - 2, NULL, AUDIO_CORE);
+
     v06x_init(scaler_to_emu, bounce_buf8[0], bounce_buf8[1]);
-    xTaskCreatePinnedToCore(&v06x_task, "v06x", 1024*4, NULL, 2 /*configMAX_PRIORITIES - 2*/, NULL, EMU_CORE);
+    xTaskCreatePinnedToCore(&v06x_task, "v06x", 1024*4, NULL, configMAX_PRIORITIES - 1, NULL, EMU_CORE);
 
     int last_frame_cycles = 0;
-    while (1) {
-        // raise the task priority of LVGL and/or reduce the handler period can improve the performance
-        //vTaskDelay(pdMS_TO_TICKS(1000));
+    while (1) {        
         xSemaphoreGive(sem_gui_ready);
         xSemaphoreTake(sem_vsync_end, portMAX_DELAY);
         ++frame_no;
