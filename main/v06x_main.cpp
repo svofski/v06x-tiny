@@ -170,12 +170,12 @@ void v06x_task(void *param)
 
     romset_t romset[] = {
         //{&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
-        // -- mostly ok but no picture {&ROM(cronex)[0], ROMLEN(cronex), 60 * 50},
+        {&ROM(cronex)[0], ROMLEN(cronex), 60 * 50},
         // -- weird sound, no picture {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
         // -- some noises, bolderm has something similar as well -- trtrtrtr in the next program
         //{&ROM(wave)[0], ROMLEN(wave), 75 * 50},
         //{&ROM(progdemo)[0], ROMLEN(progdemo), 120 * 50},
-        {&ROM(spsmerti)[0], ROMLEN(spsmerti), 45 * 50},
+        ..{&ROM(spsmerti)[0], ROMLEN(spsmerti), 45 * 50},
         {&ROM(mclrs)[0], ROMLEN(mclrs), 4 * 50},
         {&ROM(tiedye2)[0], ROMLEN(tiedye2), 4 * 50},
         {&ROM(kittham1)[0], ROMLEN(kittham1), 4 * 50},
