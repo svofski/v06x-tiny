@@ -159,7 +159,14 @@ inline void CounterUnit::mode3(int nclocks)
         this->value -= nclocks + nclocks;
         if (this->value <= 0) {
             do {
-                this->set_out(this->out ^= 1);
+                // a hax to avoid nasty high-pitched sounds
+                #if VI53_HIGH_FREQ_MUTE
+                if (this->loadvalue > 96) {
+                #endif
+                    this->set_out(this->out ^= 1);
+                #if VI53_HIGH_FREQ_MUTE
+                }
+                #endif
                 int reload = (this->loadvalue == 0) ? (this->bcd ? 10000 : 0x10000) : this->loadvalue;
                 this->value += reload;
                 if ((reload & 1) == 1) {

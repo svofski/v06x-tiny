@@ -2,8 +2,10 @@
 
 #define SCALER_CORE 1
 #define EMU_CORE 0
-#define AUDIO_CORE 1
+#define AUDIO_CORE 0            // ideally should be a core separate from the emulator, but there's some sync problem
 #define AUDIO_NBUFFERS 4
+
+#define VI53_HIGH_FREQ_MUTE 1   // mute frequencies that are too high for our samplerate
 
 #define WITH_I2S_AUDIO 1
 //#define WITH_PWM_AUDIO
