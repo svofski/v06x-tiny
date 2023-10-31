@@ -3,6 +3,9 @@
 #include <esp_attr.h>
 #include "8253.h"
 #include <stdio.h>
+
+#include "../../../main/params.h"
+
 static uint16_t tobcd(uint16_t x) {
     int result = 0;
     for (int i = 0; i < 4; ++i) {

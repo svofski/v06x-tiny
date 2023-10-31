@@ -9,6 +9,8 @@ extern "C" {
     extern unsigned int arzak_rom_len;
     extern unsigned char v06x_rom[];
     extern unsigned int v06x_rom_len;
+    extern unsigned char eightsnail_rom[];
+    extern unsigned int eightsnail_rom_len;
     extern unsigned char s8snail_rom[];
     extern unsigned int s8snail_rom_len;
     extern unsigned char clrs_rom[];
@@ -41,6 +43,8 @@ extern "C" {
     extern unsigned int cybermut_rom_len;
     extern unsigned char spsmerti_rom[];
     extern unsigned int spsmerti_rom_len;
+    extern unsigned char ses_rom[];
+    extern unsigned int ses_rom_len;
 }
 
 #define ROM(X) X##_rom

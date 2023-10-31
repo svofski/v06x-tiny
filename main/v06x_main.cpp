@@ -89,8 +89,8 @@ void v06x_task(void *param)
     memory = new Memory(); // hopefully it gets allocated in PSRAM
     assert(memory);
     ESP_LOGI(TAG, "Alocated v06x memory: %p", memory);
-    memory = static_cast<Memory *>(heap_caps_realloc(memory, sizeof(Memory), MALLOC_CAP_INTERNAL));
-    ESP_LOGI(TAG, "Memory: moved to internal DRAM: %p", memory);
+    //memory = static_cast<Memory *>(heap_caps_realloc(memory, sizeof(Memory), MALLOC_CAP_INTERNAL));
+    //ESP_LOGI(TAG, "Memory: moved to internal DRAM: %p", memory);
 
 
     Debug * debug = new Debug(memory);
@@ -104,10 +104,14 @@ void v06x_task(void *param)
     WavPlayer* tape_player = new WavPlayer(*wav);
     Keyboard* keyboard = new Keyboard();
     I8253* timer = new I8253();
-    AY* ay = new AY();
-    AYWrapper* aw = new AYWrapper(*ay);
 
-    IO* io = new IO(*memory, *keyboard, *timer, *fdc, *ay, *tape_player, esp_filler::palette8());
+    // AY Sound
+    AySound::init();
+    AySound::set_sound_format(AUDIO_SAMPLERATE, 1, 8);
+    AySound::set_stereo(AYEMU_MONO, NULL);
+    AySound::reset();
+
+    IO* io = new IO(*memory, *keyboard, *timer, *fdc, *tape_player, esp_filler::palette8());
     TV* tv = new TV();
     
     // keep it as a dummy
@@ -115,7 +119,7 @@ void v06x_task(void *param)
     ESP_LOGI(TAG, "PixelFiller: %p sizeof()=%u", filler, sizeof(PixelFiller));
 
     esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer);
-    esp_filler::frame_start();
+    esp_filler::frame_start();    
 
     //filler = reinterpret_cast<PixelFiller *>(heap_caps_realloc(filler, sizeof(PixelFiller), MALLOC_CAP_SPIRAM));
     //ESP_LOGI(TAG, "PixelFiller: moved to internal DRAM: %p", filler);
@@ -169,30 +173,31 @@ void v06x_task(void *param)
     };
 
     romset_t romset[] = {
-        //{&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
+        {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
+        {&ROM(ses)[0], ROMLEN(ses), 120 * 50},
+        {&ROM(oblitterated)[0], ROMLEN(oblitterated), 110 * 50},
+        {&ROM(arzak)[0], ROMLEN(arzak), 2 * 60 * 50},
+        {&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
         {&ROM(cronex)[0], ROMLEN(cronex), 60 * 50},
-        // -- weird sound, no picture {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
-        // -- some noises, bolderm has something similar as well -- trtrtrtr in the next program
-        //{&ROM(wave)[0], ROMLEN(wave), 75 * 50},
-        //{&ROM(progdemo)[0], ROMLEN(progdemo), 120 * 50},
-        ..{&ROM(spsmerti)[0], ROMLEN(spsmerti), 45 * 50},
+        {&ROM(progdemo)[0], ROMLEN(progdemo), 130 * 50},
         {&ROM(mclrs)[0], ROMLEN(mclrs), 4 * 50},
         {&ROM(tiedye2)[0], ROMLEN(tiedye2), 4 * 50},
+        {&ROM(spsmerti)[0], ROMLEN(spsmerti), 45 * 50},
         {&ROM(kittham1)[0], ROMLEN(kittham1), 4 * 50},
         {&ROM(clrspace)[0], ROMLEN(clrspace), 4 * 50},
-        {&ROM(oblitterated)[0], ROMLEN(oblitterated), 2 * 60 * 50},
-        {&ROM(arzak)[0], ROMLEN(arzak), 2 * 60 * 50},
-        {&ROM(s8snail)[0], ROMLEN(s8snail), 50 * 50},
+        {&ROM(eightsnail)[0], ROMLEN(eightsnail), 45 * 50},        
         {&ROM(bord)[0], ROMLEN(bord), 10 * 50},
         {&ROM(bord2)[0], ROMLEN(bord2), 10 * 50},
         {&ROM(bazis)[0], ROMLEN(bazis), 60 * 50},
         {&ROM(sunsetb)[0], ROMLEN(sunsetb), 30 * 50},
+        {&ROM(wave)[0], ROMLEN(wave), 75 * 50},
         {&ROM(hscroll)[0], ROMLEN(hscroll), 10 * 50},
     };
 
     for (int ri = 0;;) {
         board->reset(Board::ResetMode::BLKVVOD);
-        //timer->reset();
+        AySound::reset();
+        timer->reset();
         esp_filler::bob(50);
         for (size_t i = 0; i < romset[ri].len; ++i) {
             memory->write(256 + i, romset[ri].rom[i], false);

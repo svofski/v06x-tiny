@@ -22,7 +22,9 @@
 #include <soc/lcd_cam_reg.h>
 #include <soc/lcd_cam_struct.h>
 
+#include "AySound.h"
 #include "v06x_main.h"
+#include "esp_filler.h"
 
 #include "params.h"
 
@@ -141,7 +143,8 @@ uint32_t read_buffer_index;
 uint8_t * bounce_buf8[2];
 #endif
 
-int16_t * audio_pp[AUDIO_NBUFFERS];
+audio_sample_t * audio_pp[AUDIO_NBUFFERS];
+uint8_t * ay_pp[AUDIO_NBUFFERS];
 
 // this is pointless because everything is global here
 typedef struct user_context_ {
@@ -627,8 +630,13 @@ void audio_task(void *unused)
             audio_pp[num][i] = ((i / 12) & 1) << 13;
         }
         #endif
+        for (size_t i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
+            audio_pp[num][i] += ay_pp[num][i] << 6;
+        }
         i2s_channel_write(tx_handle, audio_pp[num], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 5 / portTICK_PERIOD_MS);
         //printf("audio: buf %d -> %u\n", num, written);
+        //printf("ay: falta %d samps\n", AUDIO_SAMPLES_PER_FRAME - esp_filler::ay_bufpos_reg);
+        AySound::gen_sound(AUDIO_SAMPLES_PER_FRAME - esp_filler::ay_bufpos_reg, esp_filler::ay_bufpos_reg);
     }
 }
 #endif
@@ -671,8 +679,11 @@ void app_main(void)
 #endif
 
     for (int i = 0; i < AUDIO_NBUFFERS; ++i) {
-        audio_pp[i] = static_cast<int16_t *>(heap_caps_malloc(AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, MALLOC_CAP_INTERNAL));
+        audio_pp[i] = static_cast<audio_sample_t *>(heap_caps_malloc(AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, MALLOC_CAP_INTERNAL));
         assert(audio_pp[i]);
+
+        ay_pp[i] = static_cast<uint8_t *>(heap_caps_malloc(AUDIO_SAMPLES_PER_FRAME, MALLOC_CAP_INTERNAL));
+        assert(ay_pp[i]);
     }
 
     // init scaler task on core 1 to pin scaler to core 1
@@ -688,7 +699,7 @@ void app_main(void)
     xTaskCreatePinnedToCore(&audio_task, "audio task", 1024*4, NULL, configMAX_PRIORITIES - 2, NULL, AUDIO_CORE);
 
     v06x_init(scaler_to_emu, bounce_buf8[0], bounce_buf8[1]);
-    xTaskCreatePinnedToCore(&v06x_task, "v06x", 1024*4, NULL, configMAX_PRIORITIES - 1, NULL, EMU_CORE);
+    xTaskCreatePinnedToCore(&v06x_task, "v06x", 1024*6, NULL, configMAX_PRIORITIES - 1, NULL, EMU_CORE);
 
     int last_frame_cycles = 0;
     while (1) {        

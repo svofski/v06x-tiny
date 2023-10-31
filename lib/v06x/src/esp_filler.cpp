@@ -14,6 +14,7 @@
 #include "vio.h"
 #include "esp_filler.h"
 #include "i8080.h"
+#include "AySound.h"
 
 
 extern QueueHandle_t scaler_to_emu;
@@ -22,8 +23,9 @@ extern int v06x_frame_cycles;
 
 extern QueueHandle_t audio_queue;
 int audiobuf_index;
-extern int16_t * audio_pp[AUDIO_NBUFFERS];
-int16_t * audio_buf;
+extern audio_sample_t * audio_pp[AUDIO_NBUFFERS];
+extern uint8_t * ay_pp[AUDIO_NBUFFERS];
+audio_sample_t * audio_buf;
 
 
 #define TIMED_COMMIT
@@ -111,6 +113,7 @@ void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _
 
     audiobuf_index = 0;
     audio_buf = audio_pp[audiobuf_index];
+    AySound::SamplebufAY = ay_pp[audiobuf_index];
 
     io->onborderchange = [](int border) {
         border_index = border;
@@ -278,6 +281,8 @@ void borderslab()
 
 int rpixels;
 int last_rpixels;
+int frame_rpixels;
+int ay_bufpos, ay_bufpos_reg;
 
 IRAM_ATTR
 int bob(int maxframes)
@@ -305,11 +310,12 @@ int bob(int maxframes)
     // 768/8 = 96 timer clocks per line, or 2 timer clocks per column```````````
 
     // filling the void: no reason to count individual pixels in this area
-    rpixels = last_rpixels = 0;
+    rpixels = last_rpixels = frame_rpixels = 0;
     int ipixels = 0; 
 
     ///int commit_time = 0, commit_time_pal = 0;
     int line6 = 0;
+    ay_bufpos_reg = 0;
 
     //printf("buffers[0]=%p buffers[0].10=%p  buffers[1]=%p buffers[0].10=%p\n", buffers[0], buffers[0]+10, buffers[1], buffers[1]+10);
 
@@ -317,6 +323,8 @@ int bob(int maxframes)
         write_buffer = 0;
         bmp.bmp8 = buffers[write_buffer];
         line6 = 6;
+        frame_rpixels = rpixels;
+        ay_bufpos = 0;
 
         //printf("frame %d\n", frm);
         // frame counted in 16-pixel chunks
@@ -516,6 +524,16 @@ rowend:
             }
 
             if (--line6 == 0) {
+                // ay line update
+                {
+                    size_t bufpos = (esp_filler::rpixels - esp_filler::frame_rpixels) / 96;
+                    if (bufpos > esp_filler::ay_bufpos) {
+                        //printf("gen-c: bufpos=%d aypos=%d cnt=%d!\n", bufpos, esp_filler::ay_bufpos, bufpos - esp_filler::ay_bufpos);
+                        AySound::gen_sound(bufpos - esp_filler::ay_bufpos, esp_filler::ay_bufpos);
+                        esp_filler::ay_bufpos = bufpos;
+                    }
+                }
+
                 write_buffer ^= 1;
                 bmp.bmp8 = buffers[write_buffer];
                 line6 = 6;
@@ -534,10 +552,13 @@ rowend:
             *audio_buf++ = vi53->out_sum() << 10;   // sample audio
         }
 
+        ay_bufpos_reg = ay_bufpos;
+
         // post audio buffer index to be taken in by the audio driver
         xQueueSend(::audio_queue, &audiobuf_index,  5 / portTICK_PERIOD_MS);
         if (++audiobuf_index == AUDIO_NBUFFERS) audiobuf_index = 0;
         audio_buf = audio_pp[audiobuf_index];
+        AySound::SamplebufAY = ay_pp[audiobuf_index];
 
         ++v06x_framecount;
         v06x_frame_cycles = ipixels;
@@ -570,13 +591,25 @@ void i8080_hal_io_output(int port, int value)
     #ifndef TIMED_COMMIT    
     esp_filler::io->commit_palette(0x0f & esp_filler::color_index);
     #else
-    if (port <= 0xb) {
+    // non-palette i/o
+    if (port == 0x15) {
         esp_filler::io->commit();           // all regular peripherals
-
+    }
+    else if (port == 0x14) {
+        // generate ay sound up to current position
+        size_t bufpos = (esp_filler::rpixels - esp_filler::frame_rpixels) / 96;
+        if (bufpos > esp_filler::ay_bufpos) {
+            AySound::gen_sound(bufpos - esp_filler::ay_bufpos, esp_filler::ay_bufpos);
+            esp_filler::ay_bufpos = bufpos;
+        }
+        esp_filler::io->commit();           // all regular peripherals
+    }
+    else if (port <= 0xb) {        
         if (port > 0x08) {  // timer
             esp_filler::vi53->count_clocks((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
             esp_filler::last_rpixels = esp_filler::rpixels;
         }
+        esp_filler::io->commit();           // all regular peripherals
     }
     else if (port >= 0xc && port <= 0xf) {
         esp_filler::commit_pal = true;      // near-instant

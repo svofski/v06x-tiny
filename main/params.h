@@ -18,3 +18,5 @@
 #define I2S_DOUT      17
 #define I2S_BCLK      0     // was 19 in some revisions of the board
 #define I2S_LRC       18
+
+typedef int16_t audio_sample_t;

@@ -5,7 +5,7 @@
 #include <functional>
 #include "keyboard.h"
 #include "8253.h"
-#include "ay.h"
+#include "AySound.h"
 #include "fd1793.h"
 #include "wav.h"
 #include "memory.h"
@@ -22,7 +22,6 @@ private:
     Keyboard & keyboard;
     I8253 & timer;
     FD1793 & fdc;
-    AY & ay;
     WavPlayer & tape_player;
 
     uint16_t * palette8; // uint8_t[16]
@@ -45,8 +44,8 @@ public:
 
 public:
     IO(Memory & _memory, Keyboard & _keyboard, I8253 & _timer, FD1793 & _fdc, 
-            AY & _ay, WavPlayer & _tape_player, uint16_t * palette8) 
-        : kvaz(_memory), keyboard(_keyboard), timer(_timer), fdc(_fdc), ay(_ay),
+            WavPlayer & _tape_player, uint16_t * palette8) 
+        : kvaz(_memory), keyboard(_keyboard), timer(_timer), fdc(_fdc),
         tape_player(_tape_player), palette8(palette8),
         CW(0x08), PA(0xff), PB(0xff), PC(0xff), CW2(0), PA2(0xff), PB2(0xff), PC2(0xff)
     {
@@ -133,8 +132,9 @@ public:
                 return this->joy_0f;
 
             case 0x14:
+                result = AySound::getRegisterData();
             case 0x15:
-                result = this->ay.read(port & 1);
+                result = 0xff;
                 break;
 
             case 0x18: // fdc data
@@ -279,9 +279,13 @@ public:
                 this->kvaz.control_write(w8);
                 break;
             case 0x14:
+                // in esp_filler we catch up generation before writing
+                AySound::setRegisterData(w8);
+                break;
             case 0x15:
+                AySound::selectRegister(w8 & 0xf);
                 //printf("ay.write %x=%x\n", port, w8);
-                this->ay.write(port & 1, w8);
+                //this->ay.write(port & 1, w8);
                 //printf("ay.write done\n");
                 break;
 
@@ -317,7 +321,7 @@ public:
     void commit_palette(int index) 
     {
         int w8 = this->palettebyte;
-        if (w8 == -1 && this->outport == 0x0c) {
+        if (w8 == -1 && (this->outport >= 0x0c && this->outport <= 0x0f)) {
             w8 = this->outbyte;
             this->outport = this->outbyte = -1;
         }

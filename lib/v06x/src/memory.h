@@ -9,8 +9,8 @@
 
 #include "esp_attr.h"
 
-//#define TOTAL_MEMORY (64 * 1024 + 256 * 1024)
-#define TOTAL_MEMORY (64 * 1024)
+#define TOTAL_MEMORY (64 * 1024 + 256 * 1024)
+//#define TOTAL_MEMORY (64 * 1024)
 
 
 class Memory {
