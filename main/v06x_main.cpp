@@ -189,7 +189,7 @@ void v06x_task(void *param)
         {&ROM(bord)[0], ROMLEN(bord), 10 * 50},
         {&ROM(bord2)[0], ROMLEN(bord2), 10 * 50},
         {&ROM(bazis)[0], ROMLEN(bazis), 60 * 50},
-        {&ROM(sunsetb)[0], ROMLEN(sunsetb), 30 * 50},
+        {&ROM(sunsetb)[0], ROMLEN(sunsetb), 15 * 50},
         {&ROM(wave)[0], ROMLEN(wave), 75 * 50},
         {&ROM(hscroll)[0], ROMLEN(hscroll), 10 * 50},
     };
