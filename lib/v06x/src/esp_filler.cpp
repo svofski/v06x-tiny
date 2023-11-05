@@ -91,6 +91,9 @@ bool commit_pal;
 int commit_io;
 #endif
 
+volatile int v06x_framecount = 0;
+volatile int v06x_frame_cycles = 0;
+
 IO * io;
 I8253 * vi53;
 
@@ -556,8 +559,8 @@ rowend:
         audio_buf = audio::audio_pp[audiobuf_index];
         AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
 
-        scaler::v06x_framecount++;
-        scaler::v06x_frame_cycles = ipixels;
+        v06x_framecount++;
+        v06x_frame_cycles = ipixels;
     }
 
     return maxframes;

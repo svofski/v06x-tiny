@@ -17,6 +17,9 @@ namespace esp_filler {
     extern int write_buffer;
     extern int ay_bufpos_reg;
 
+    extern volatile int v06x_framecount;
+    extern volatile int v06x_frame_cycles;
+
     uint16_t * palette8();    
     void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * vi53);
     void frame_start();

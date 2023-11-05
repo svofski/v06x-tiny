@@ -5,7 +5,6 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 
-
 #include "memory.h"
 #include "fd1793.h"
 #include "vio.h"

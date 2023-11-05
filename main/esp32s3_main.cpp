@@ -75,8 +75,8 @@ void app_main(void)
         
         if (frame_no % 50 == 0) {
             printf("fps=%d v06x_fps=%d cycles=%d frame dur=%lluus\n",
-                scaler::fps, scaler::v06x_fps, (scaler::v06x_frame_cycles - last_frame_cycles) / 50, scaler::frameduration_us);
-            last_frame_cycles = scaler::v06x_frame_cycles;
+                scaler::fps, scaler::v06x_fps, (esp_filler::v06x_frame_cycles - last_frame_cycles) / 50, scaler::frameduration_us);
+            last_frame_cycles = esp_filler::v06x_frame_cycles;
         }
         
         // if (tutu_i == NTUTU) {

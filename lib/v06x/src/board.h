@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <vector>
 #include <functional>
-#include "event.h"
 #include "i8080.h"
 #include "serialize.h"
 
@@ -68,10 +67,6 @@ class Board
     bool terminating() const { return io.the_keyboard().terminate; };
     void interrupt(bool on);
 
-    void handle_event(SDL_Event& event);
-    void handle_keyup(SDL_KeyboardEvent& key);
-    void handle_keydown(SDL_KeyboardEvent& key);
-    void handle_window_event(SDL_Event& event);
     void set_joysticks(int joy_0e, int joy_0f);
 
   public:

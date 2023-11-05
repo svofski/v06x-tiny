@@ -115,34 +115,6 @@ bool Board::check_interrupt()
 //#define DBG_FRM(a,b,bob) if (frame_no>=a && frame_no<=b) {bob;}
 #define DBG_FRM(a, b, bob) {};
 
-
-void Board::handle_event(SDL_Event& event)
-{
-    // printf("handle_event: event.type=%d\n", event.type);
-    switch (event.type) {
-        case SDL_KEYDOWN:
-            this->handle_keydown(event.key);
-            break;
-        case SDL_KEYUP:
-            this->handle_keyup(event.key);
-            break;
-        default:
-            break;
-    }
-}
-
-/* emulator thread */
-void Board::handle_keydown(SDL_KeyboardEvent& key)
-{
-    this->io.the_keyboard().key_down(key);
-}
-
-/* emulator thread */
-void Board::handle_keyup(SDL_KeyboardEvent& key)
-{
-    this->io.the_keyboard().key_up(key);
-}
-
 void Board::dump_memory(const int start, const int count)
 {
     for (int i = start; i < start + count; ++i) {
@@ -177,13 +149,6 @@ void Board::script_continue()
 {
     this->script_interrupt = false;
 }
-
-
-static bool iospace(uint32_t addr)
-{
-    return (addr & 0x80000000) != 0;
-}
-
 
 #include "serialize.h"
 

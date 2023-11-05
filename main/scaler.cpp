@@ -17,11 +17,10 @@
 #include <soc/lcd_cam_reg.h>
 #include <soc/lcd_cam_struct.h>
 
-
-
 #include "params.h"
 #include "scaler.h"
 #include "sync.h"
+#include "esp_filler.h"
 
 #define C8TO16(c)   (((((c) & 7) * 4) << 11) | (((((c) >> 3) & 7) * 8) << 5) | ((((c) >> 6) & 3) * 8))
 
@@ -44,11 +43,6 @@ uint8_t * bounce_buf8[2];
 volatile int framecount = 0;
 volatile uint64_t lastframe_us = 0;
 volatile uint64_t frameduration_us = 0;
-
-// esp_filler updates these
-volatile int v06x_framecount = 0;
-volatile int v06x_frame_cycles = 0;
-
 
 volatile int fps = 0;
 volatile int v06x_fps = 0;
@@ -94,8 +88,8 @@ static void tick_1s(void *arg)
     fps = framecount;
     framecount = 0;  
 
-    v06x_fps = v06x_framecount;
-    v06x_framecount = 0;
+    v06x_fps = esp_filler::v06x_framecount;
+    esp_filler::v06x_framecount = 0;
 }
 
 #if 0
