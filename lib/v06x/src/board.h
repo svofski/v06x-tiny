@@ -3,18 +3,9 @@
 #include <stdio.h>
 #include <vector>
 #include <functional>
-#if !defined(__ANDROID_NDK__) && !defined(__GODOT__) & !defined(ESP_PLATFORM)
-#include "SDL.h"
-#else
 #include "event.h"
-#endif
 #include "i8080.h"
-#include "filler.h"
-#include "tv.h"
-#include "cadence.h"
-#include "breakpoint.h"
 #include "serialize.h"
-#include "dummy_debug.h"
 
 class Board;
 
@@ -38,36 +29,21 @@ class Board
     int last_opcode;
     int frame_no;
 
-    const int* cadence_frames;
-    int cadence_length = 1;
-    int cadence_seq = 0;
-
     bool irq;
     bool inte;      /* CPU INTE pin */
     bool irq_carry; /* imitates cpu waiting after T2 when INTE */
 
     Memory& memory;
     IO& io;
-    PixelFiller& filler;
-    TV& tv;
     WavPlayer& tape_player;
-    Debug& debug;
 
     std::vector<uint8_t> boot;
-
-    int debugging;
-    int debugger_interrupt; // debugger interrupted
 
     // script specific hooks, independent of debugger hooks
     bool scripting;         // check hooks on every instruction
     bool script_interrupt;  // paused execution because of script hook
-    std::vector<Breakpoint> breakpoints;  // list of script breakpoints
-    std::vector<Watchpoint> memory_watchpoints;
-    std::vector<Watchpoint> io_watchpoints;
 
   public:
-    std::function<void(void)> poll_debugger;
-    std::function<void(void)> onbreakpoint = nullptr;
     std::function<void(void)> onframetimer;
 
     struct
@@ -80,16 +56,13 @@ class Board
     int ioread;
 
   private:
-    void refresh_watchpoint_listeners(void);
     void init_bootrom(const uint8_t* src, size_t size);
 
   public:
-    Board(Memory& _memory, IO& _io, PixelFiller& _filler, 
-      TV& _tv, WavPlayer& _tape_player, Debug& _debug);
+    Board(Memory& _memory, IO& _io, WavPlayer& _tape_player);
 
     void init();
-    void reset(Board::ResetMode
-        blkvvod); // true: power-on reset, false: boot loaded prog
+    void reset(Board::ResetMode blkvvod); // true: power-on reset, false: boot loaded prog
     int get_frame_no() const { return frame_no; }
     void handle_quit();
     bool terminating() const { return io.the_keyboard().terminate; };
@@ -101,42 +74,7 @@ class Board
     void handle_window_event(SDL_Event& event);
     void set_joysticks(int joy_0e, int joy_0f);
 
-    void toggle_fullscreen() { tv.toggle_fullscreen(); }
-    void render_frame(const int frame, const bool executed);
-    int execute_frame_with_cadence(bool update_screen, bool use_cadence);
-    void single_step(bool update_screen);
-    
-    //int esp_execute_frame();
-    //int esp_single_step();
-    int esp_execute_five(); // execute five lines, 192*5 = 960 cycles, what to do about remainder? 5*62=310, there will be 2 lines more
-    int esp_freewheel_until_top();
-    int esp_carry_cycles;
-
-    TV& get_tv() const { return tv; }
-
   public:
-    auto read_stack(const size_t _len) const -> std::vector<uint16_t>;
-    auto debug_read_executed_memory(uint16_t _addr, const size_t _len) const
-      -> std::vector<uint8_t>;
-    auto debug_read_hw_info() const -> std::vector<int>;
-    auto read_memory(const int start, const int count) -> const std::string;
-    void write_memory_byte(int addr, int value);
-    /* AA FF BB CC DD EE HH LL 00 00 00 00 SS PP
-     * 00 00 00 00 00 00 00 00 00 00 PP CC */
-    std::string read_registers();
-    auto read_registers_b() -> const std::vector<int>;
-    void write_registers(uint8_t* regs);
-    int is_break() const;
-    void set_debugging(const bool _debugging);
-    void debugger_attached();
-    void debugger_detached();
-    void debugger_break();
-    void debugger_continue();
-    std::string insert_breakpoint(int type, int addr, int kind);
-    std::string remove_breakpoint(int type, int addr, int kind);
-    bool check_breakpoint();
-    void check_watchpoint(uint32_t addr, uint8_t value, int how);
-
     void script_attached();   // script on, begin checking hooks
     void script_detached();   // script off
     void script_break();      // break execution from script

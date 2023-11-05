@@ -9,7 +9,6 @@
 #include "memory.h"
 #include "fd1793.h"
 #include "vio.h"
-#include "tv.h"
 #include "board.h"
 #include "options.h"
 #include "keyboard.h"
@@ -18,7 +17,6 @@
 #include "wav.h"
 #include "util.h"
 #include "version.h"
-#include "dummy_debug.h"
 #include "options.h"
 #include "esp_filler.h"
 
@@ -92,11 +90,6 @@ void v06x_task(void *param)
     //memory = static_cast<Memory *>(heap_caps_realloc(memory, sizeof(Memory), MALLOC_CAP_INTERNAL));
     //ESP_LOGI(TAG, "Memory: moved to internal DRAM: %p", memory);
 
-
-    Debug * debug = new Debug(memory);
-    ESP_LOGI(TAG, "Debug: %p", debug);
-    assert(debug);
-
     FD1793 * fdc = new FD1793();
     ESP_LOGI(TAG, "FDC: %p", fdc);
 
@@ -112,26 +105,14 @@ void v06x_task(void *param)
     AySound::reset();
 
     IO* io = new IO(*memory, *keyboard, *timer, *fdc, *tape_player, esp_filler::palette8());
-    TV* tv = new TV();
     
-    // keep it as a dummy
-    PixelFiller* filler = new PixelFiller(*memory, *io, *tv);
-    ESP_LOGI(TAG, "PixelFiller: %p sizeof()=%u", filler, sizeof(PixelFiller));
-
     esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer);
     esp_filler::frame_start();    
 
-    //filler = reinterpret_cast<PixelFiller *>(heap_caps_realloc(filler, sizeof(PixelFiller), MALLOC_CAP_SPIRAM));
-    //ESP_LOGI(TAG, "PixelFiller: moved to internal DRAM: %p", filler);
-
-    Board* board = new Board(*memory, *io, *filler, *tv, *tape_player, *debug);
-
+    Board* board = new Board(*memory, *io, *tape_player);
     ESP_LOGI(TAG, "Board: %p", board);
+    assert(board);
 
-#if 1
-
-    filler->init();
-    tv->init();
     board->init();
     fdc->init();
     if (Options.bootpalette) {
@@ -209,48 +190,6 @@ void v06x_task(void *param)
         if (++ri == sizeof(romset)/sizeof(romset[0])) ri = 0;
     }
 #endif
-    // for (size_t i = 0; i < tiedye2_rom_len; ++i) {
-    //     memory->write(256 + i, tiedye2_rom[i], false);
-    // }
-    // for (size_t i = 0; i < kittham1_rom_len; ++i) {
-    //     memory->write(256 + i, kittham1_rom[i], false);
-    // }
-    // for (size_t i = 0; i < ROMLEN(clrspace); ++i) {
-    //     memory->write(256 + i, ROM(clrspace)[i], false);
-    // }
-    // for (size_t i = 0; i < oblitterated_rom_len; ++i) {
-    //     memory->write(256 + i, oblitterated_rom[i], false);
-    // }
-    // for (size_t i = 0; i < arzak_rom_len; ++i) {
-    //     memory->write(256 + i, arzak_rom[i], false);
-    // }
-    // for (size_t i = 0; i < ROMLEN(s8snail); ++i) {
-    //     memory->write(256 + i, ROM(s8snail)[i], false);
-    // }
-    // for (size_t i = 0; i < ROMLEN(bord); ++i) {
-    //     memory->write(256 + i, ROM(bord)[i], false);
-    // }
-    // for (size_t i = 0; i < ROMLEN(bord2); ++i) {
-    //     memory->write(256 + i, ROM(bord2)[i], false);
-    // }
-    // for (size_t i = 0; i < ROMLEN(bazis); ++i) {
-    //     memory->write(256 + i, ROM(bazis)[i], false);
-    // }
-    // for (size_t i = 0; i < ROMLEN(wave); ++i) {
-    //     memory->write(256 + i, ROM(wave)[i], false);
-    // }
-    // for (size_t i = 0; i < ROMLEN(sunsetb); ++i) {
-    //     memory->write(256 + i, ROM(sunsetb)[i], false);
-    // }
-    // for (size_t i = 0; i < ROMLEN(hscroll); ++i) {
-    //     memory->write(256 + i, ROM(hscroll)[i], false);
-    // }
-
-    // printf("loaded oblitterated\n");
-    // board->reset(Board::ResetMode::BLKSBR);
-
-    //esp_filler::bob(7);
-    //i8080cpu::trace_enable = 1;
 
 #ifdef DUMPNIK
     esp_filler::bob(450);
@@ -277,26 +216,6 @@ void v06x_task(void *param)
 #endif
 
     esp_filler::bob(0);
-    // for (;;) {        
-    //     int pos_px = -1;
-
-    //     // freewheel the emulator until we fill lines 0v..4v
-    //     board->esp_freewheel_until_top();
-    //     //ESP_LOGI(TAG, "v06x_task: freewheel end");
-    //     v06x_framecount += 1;
-    //     // sync until line 0
-    //     while (xQueueReceive(que_scaler_to_emu, &pos_px, portMAX_DELAY)) {
-    //         if (pos_px == 0) {
-    //             break;
-    //         }
-    //     }
-    //     board->esp_execute_five();
-    //     for (int i = 2; i < 60; ++i) {
-    //         xQueueReceive(que_scaler_to_emu, &pos_px, portMAX_DELAY);
-    //         board->esp_execute_five();
-    //     }
-    // }
-#endif    
 }
 
 
