@@ -41,11 +41,11 @@ void app_main(void)
     syncp::create_primitives();
 
     gpio_config_t bk_gpio_config = {
-        .pin_bit_mask = 1ULL << EXAMPLE_PIN_NUM_BK_LIGHT,
+        .pin_bit_mask = 1ULL << PIN_NUM_BK_LIGHT,
         .mode = GPIO_MODE_OUTPUT,
     };
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
-    gpio_set_level(static_cast<gpio_num_t>(EXAMPLE_PIN_NUM_BK_LIGHT), EXAMPLE_LCD_BK_LIGHT_OFF_LEVEL);
+    gpio_set_level(static_cast<gpio_num_t>(PIN_NUM_BK_LIGHT), LCD_BK_LIGHT_OFF_LEVEL);
 
     scaler::allocate_buffers();
     audio::allocate_buffers();
@@ -80,8 +80,8 @@ void app_main(void)
         }
         
         // if (tutu_i == NTUTU) {
-        //         printf("0: len=%d line=%d\n", tutu_len_bytes[0], tutu_pos_px[0]/EXAMPLE_LCD_H_RES);
-        //         for (int i = 1; i < NTUTU; ++i) printf("%2d: t=%lld line=%d l=%d\n", i, tutu[i] - tutu[i-1], tutu_pos_px[i]/EXAMPLE_LCD_H_RES, tutu_len_bytes[i]);
+        //         printf("0: len=%d line=%d\n", tutu_len_bytes[0], tutu_pos_px[0]/LCD_H_RES);
+        //         for (int i = 1; i < NTUTU; ++i) printf("%2d: t=%lld line=%d l=%d\n", i, tutu[i] - tutu[i-1], tutu_pos_px[i]/LCD_H_RES, tutu_len_bytes[i]);
         //         tutu_i = -1;
         //         putchar('\n');
         // }

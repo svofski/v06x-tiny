@@ -133,6 +133,7 @@ public:
 
             case 0x14:
                 result = AySound::getRegisterData();
+                break;
             case 0x15:
                 result = 0xff;
                 break;

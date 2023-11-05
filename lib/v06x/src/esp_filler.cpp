@@ -556,7 +556,7 @@ rowend:
         audio_buf = audio::audio_pp[audiobuf_index];
         AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
 
-        ++scaler::v06x_framecount;
+        scaler::v06x_framecount++;
         scaler::v06x_frame_cycles = ipixels;
     }
 

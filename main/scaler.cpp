@@ -38,12 +38,8 @@ typedef struct user_context_ {
 user_context_t user_context;
 
 
-#if(FULLBUFFER)
-void * scaler_buf[2];
-#else
 uint32_t read_buffer_index;
 uint8_t * bounce_buf8[2];
-#endif
 
 volatile int framecount = 0;
 volatile uint64_t lastframe_us = 0;
@@ -90,7 +86,7 @@ void create_pinned_to_core()
 void main_screen_turn_on()
 {
     ESP_LOGI(TAG, "Turn on LCD backlight");
-    gpio_set_level(static_cast<gpio_num_t>(EXAMPLE_PIN_NUM_BK_LIGHT), EXAMPLE_LCD_BK_LIGHT_ON_LEVEL);
+    gpio_set_level(static_cast<gpio_num_t>(PIN_NUM_BK_LIGHT), LCD_BK_LIGHT_ON_LEVEL);
 }
 
 static void tick_1s(void *arg)
@@ -128,37 +124,37 @@ fillcolumn_h54(uint16_t * col, uint32_t * src)
     c16_4 = C8TO16(s4_0 >> 24);
         // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 0
+        ofs += LCD_H_RES;  // + 0
     c16_1 = C8TO16(s4_1 >> 0);
     c16_2 = C8TO16(s4_1 >> 8);
     c16_3 = C8TO16(s4_1 >> 16);
     c16_4 = C8TO16(s4_1 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 0.625
+        ofs += LCD_H_RES;  // + 0.625
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 1.25
+        ofs += LCD_H_RES;  // + 1.25
     c16_1 = C8TO16(s4_2 >> 0);
     c16_2 = C8TO16(s4_2 >> 8);
     c16_3 = C8TO16(s4_2 >> 16);
     c16_4 = C8TO16(s4_2 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 1.875
+        ofs += LCD_H_RES;  // + 1.875
     c16_1 = C8TO16(s4_3 >> 0);
     c16_2 = C8TO16(s4_3 >> 8);
     c16_3 = C8TO16(s4_3 >> 16);
     c16_4 = C8TO16(s4_3 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 2.5
+        ofs += LCD_H_RES;  // + 2.5
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 3.125
+        ofs += LCD_H_RES;  // + 3.125
     c16_1 = C8TO16(s4_4 >> 0);
     c16_2 = C8TO16(s4_4 >> 8);
     c16_3 = C8TO16(s4_4 >> 16);
     c16_4 = C8TO16(s4_4 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 3.75
+        ofs += LCD_H_RES;  // + 3.75
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // + 4.375
+        ofs += LCD_H_RES;  // + 4.375
 }
 #endif 
 // fill one block with scaling up
@@ -189,50 +185,50 @@ fillcolumn_h54_v106(uint16_t * col, uint32_t * src)
     c16_4 = C8TO16(s4_0 >> 24);
         // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 1
+        ofs += LCD_H_RES;  // dst_line = 1
     // y + 0.6, y + 1.2
     c16_1 = C8TO16(s4_1 >> 0);
     c16_2 = C8TO16(s4_1 >> 8);
     c16_3 = C8TO16(s4_1 >> 16);
     c16_4 = C8TO16(s4_1 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;   // dst_line = 2
+        ofs += LCD_H_RES;   // dst_line = 2
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;   // dst_line = 3
+        ofs += LCD_H_RES;   // dst_line = 3
     // y + 1.8, y + 2.4
     c16_1 = C8TO16(s4_2 >> 0);
     c16_2 = C8TO16(s4_2 >> 8);
     c16_3 = C8TO16(s4_2 >> 16);
     c16_4 = C8TO16(s4_2 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 4
+        ofs += LCD_H_RES;  // dst_line = 4
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 5
+        ofs += LCD_H_RES;  // dst_line = 5
     // y = 3.0
     c16_1 = C8TO16(s4_3 >> 0);
     c16_2 = C8TO16(s4_3 >> 8);
     c16_3 = C8TO16(s4_3 >> 16);
     c16_4 = C8TO16(s4_3 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 6
+        ofs += LCD_H_RES;  // dst_line = 6
     // y + 3.6, y + 4.2
     c16_1 = C8TO16(s4_4 >> 0);
     c16_2 = C8TO16(s4_4 >> 8);
     c16_3 = C8TO16(s4_4 >> 16);
     c16_4 = C8TO16(s4_4 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 7
+        ofs += LCD_H_RES;  // dst_line = 7
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 8
+        ofs += LCD_H_RES;  // dst_line = 8
     // y + 4.8, y + 5.4
     c16_1 = C8TO16(s4_5 >> 0);
     c16_2 = C8TO16(s4_5 >> 8);
     c16_3 = C8TO16(s4_5 >> 16);
     c16_4 = C8TO16(s4_5 >> 24);
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += EXAMPLE_LCD_H_RES;  // dst_line = 9
+        ofs += LCD_H_RES;  // dst_line = 9
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        //ofs += EXAMPLE_LCD_H_RES;  // dst_line = 10
+        //ofs += LCD_H_RES;  // dst_line = 10
 }
 
 constexpr int NTUTU = 150;
@@ -266,7 +262,7 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
     uint8_t * buf8 = bounce_buf8[read_buffer_index];
     uint16_t * bounce16 = (uint16_t *)bounce_buf;
 
-    int border_w = (EXAMPLE_LCD_H_RES - BUFCOLUMNS * 5/4) / 2;
+    int border_w = (LCD_H_RES - BUFCOLUMNS * 5/4) / 2;
 
     uint8_t * bbuf = static_cast<uint8_t *>(bounce_buf);
 
@@ -278,10 +274,10 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
         memset(bbuf, 0, border_w << 1);
         #endif
         memset(bbuf + 2 * BUFCOLUMNS * 5/4 + (border_w << 1), 0, (border_w << 1) + 2); // extra pixel because border_w is odd
-        bbuf += EXAMPLE_LCD_H_RES * 2;
+        bbuf += LCD_H_RES * 2;
     }
 
-    for (int dst_x = border_w, src_x = 0; dst_x + 5 < EXAMPLE_LCD_H_RES - border_w; dst_x += 5, src_x += 4) {
+    for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4) {
         fillcolumn_h54_v106(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
     }
 
@@ -300,9 +296,9 @@ void create_lcd_driver_task(void *pvParameter)
     esp_lcd_rgb_panel_config_t panel_config = {
         .clk_src = LCD_CLK_SRC_DEFAULT,
         .timings = {
-            .pclk_hz = EXAMPLE_LCD_PIXEL_CLOCK_HZ,
-            .h_res = EXAMPLE_LCD_H_RES,
-            .v_res = EXAMPLE_LCD_V_RES,
+            .pclk_hz = LCD_PIXEL_CLOCK_HZ,
+            .h_res = LCD_H_RES,
+            .v_res = LCD_V_RES,
             // The following parameters should refer to LCD spec
             .hsync_pulse_width = 4,
             .hsync_back_porch = 8,
@@ -323,46 +319,36 @@ void create_lcd_driver_task(void *pvParameter)
         },
         .data_width = 16, // RGB565 in parallel mode, thus 16bit in width
         .num_fbs = LCD_NUM_FB,
-#if CONFIG_EXAMPLE_USE_BOUNCE_BUFFER
-        .bounce_buffer_size_px = BOUNCE_NLINES * EXAMPLE_LCD_H_RES,
-#endif
+        .bounce_buffer_size_px = BOUNCE_NLINES * LCD_H_RES,
         .sram_trans_align = 8,
         .psram_trans_align = 64,
-        .hsync_gpio_num = EXAMPLE_PIN_NUM_HSYNC,
-        .vsync_gpio_num = EXAMPLE_PIN_NUM_VSYNC,
-        .de_gpio_num = EXAMPLE_PIN_NUM_DE,
-        .pclk_gpio_num = EXAMPLE_PIN_NUM_PCLK,
-        .disp_gpio_num = EXAMPLE_PIN_NUM_DISP_EN,
+        .hsync_gpio_num = PIN_NUM_HSYNC,
+        .vsync_gpio_num = PIN_NUM_VSYNC,
+        .de_gpio_num = PIN_NUM_DE,
+        .pclk_gpio_num = PIN_NUM_PCLK,
+        .disp_gpio_num = PIN_NUM_DISP_EN,
         .data_gpio_nums = {
-            EXAMPLE_PIN_NUM_DATA0,
-            EXAMPLE_PIN_NUM_DATA1,
-            EXAMPLE_PIN_NUM_DATA2,
-            EXAMPLE_PIN_NUM_DATA3,
-            EXAMPLE_PIN_NUM_DATA4,
-            EXAMPLE_PIN_NUM_DATA5,
-            EXAMPLE_PIN_NUM_DATA6,
-            EXAMPLE_PIN_NUM_DATA7,
-            EXAMPLE_PIN_NUM_DATA8,
-            EXAMPLE_PIN_NUM_DATA9,
-            EXAMPLE_PIN_NUM_DATA10,
-            EXAMPLE_PIN_NUM_DATA11,
-            EXAMPLE_PIN_NUM_DATA12,
-            EXAMPLE_PIN_NUM_DATA13,
-            EXAMPLE_PIN_NUM_DATA14,
-            EXAMPLE_PIN_NUM_DATA15,
+            PIN_NUM_DATA0,
+            PIN_NUM_DATA1,
+            PIN_NUM_DATA2,
+            PIN_NUM_DATA3,
+            PIN_NUM_DATA4,
+            PIN_NUM_DATA5,
+            PIN_NUM_DATA6,
+            PIN_NUM_DATA7,
+            PIN_NUM_DATA8,
+            PIN_NUM_DATA9,
+            PIN_NUM_DATA10,
+            PIN_NUM_DATA11,
+            PIN_NUM_DATA12,
+            PIN_NUM_DATA13,
+            PIN_NUM_DATA14,
+            PIN_NUM_DATA15,
         },
         .flags = {
             .refresh_on_demand = false,
             .fb_in_psram = true, // allocate frame buffer in PSRAM
-            #if (FULLBUFFER)
-            #if (DOUBLE_FB)
-            .double_fb = 1,
-            #else
-            .double_fb = 0,
-            #endif
-            #else
             .no_fb = true,
-            #endif
         },
     };
     ESP_ERROR_CHECK(esp_lcd_new_rgb_panel(&panel_config, &panel_handle));
@@ -390,10 +376,6 @@ void create_lcd_driver_task(void *pvParameter)
     };
     ESP_ERROR_CHECK(esp_lcd_rgb_panel_register_event_callbacks(panel_handle, &cbs, &user_context));
 
-#if(FULLBUFFER)
-    ESP_ERROR_CHECK(esp_lcd_rgb_panel_get_frame_buffer(panel_handle, 2, &scaler_buf[0], &scaler_buf[1]));
-#endif
-
     xSemaphoreGive(sem_vsync_end);
     vTaskDelete(NULL);
 }
@@ -408,7 +390,7 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
     if (xSemaphoreTakeFromISR(sem_gui_ready, &high_task_awoken) == pdTRUE) {
         xSemaphoreGiveFromISR(sem_vsync_end, &high_task_awoken);
     }
-    ++framecount;
+    framecount++;
     return high_task_awoken == pdTRUE;
 }
 
