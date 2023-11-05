@@ -18,10 +18,9 @@
 
 #include "sync.h"
 #include "scaler.h"
+#include "audio.h"
 
 int audiobuf_index;
-extern audio_sample_t * audio_pp[AUDIO_NBUFFERS];
-extern uint8_t * ay_pp[AUDIO_NBUFFERS];
 audio_sample_t * audio_buf;
 
 
@@ -109,8 +108,8 @@ void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _
     fiveline_count = 0;        // count groups of 5 lines
 
     audiobuf_index = 0;
-    audio_buf = audio_pp[audiobuf_index];
-    AySound::SamplebufAY = ay_pp[audiobuf_index];
+    audio_buf = audio::audio_pp[audiobuf_index];
+    AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
 
     io->onborderchange = [](int border) {
         border_index = border;
@@ -554,8 +553,8 @@ rowend:
         // post audio buffer index to be taken in by the audio driver
         xQueueSend(::audio_queue, &audiobuf_index,  5 / portTICK_PERIOD_MS);
         if (++audiobuf_index == AUDIO_NBUFFERS) audiobuf_index = 0;
-        audio_buf = audio_pp[audiobuf_index];
-        AySound::SamplebufAY = ay_pp[audiobuf_index];
+        audio_buf = audio::audio_pp[audiobuf_index];
+        AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
 
         ++scaler::v06x_framecount;
         scaler::v06x_frame_cycles = ipixels;

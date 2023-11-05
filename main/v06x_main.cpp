@@ -24,16 +24,26 @@
 
 extern const char *TAG;
 
+namespace v06x 
+{
+
 static Memory * memory;
 static QueueHandle_t que_scaler_to_emu;
 static uint8_t * buf0;
 static uint8_t * buf1;
 
-void v06x_init(QueueHandle_t from_scaler, uint8_t * _buf0, uint8_t * _buf1)
+static void v06x_task(void *param);
+
+void init(QueueHandle_t from_scaler, uint8_t * _buf0, uint8_t * _buf1)
 {
     que_scaler_to_emu = from_scaler;
     buf0 = _buf0;
     buf1 = _buf1;
+}
+
+void create_pinned_to_core()
+{
+    xTaskCreatePinnedToCore(&v06x_task, "v06x", 1024*6, NULL, configMAX_PRIORITIES - 1, NULL, EMU_CORE);
 }
 
 void benchmark_bob(Board * board)
@@ -216,4 +226,4 @@ void v06x_task(void *param)
     esp_filler::bob(0);
 }
 
-
+}

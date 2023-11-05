@@ -3,7 +3,9 @@
 
 #include "freertos/FreeRTOS.h"
 
-void v06x_init(SemaphoreHandle_t sem_request_handle, uint8_t * _buf0, uint8_t * _buf1);
-void v06x_task(void *);
-
+namespace v06x
+{
+void init(SemaphoreHandle_t sem_request_handle, uint8_t * _buf0, uint8_t * _buf1);
+void create_pinned_to_core(void);
+}
 #endif
