@@ -9,19 +9,16 @@
 #include "esp_attr.h"
 #include <cstdint>
 
-#include "../../../main/params.h"
+#include "params.h"
 #include "globaldefs.h"
 #include "vio.h"
 #include "esp_filler.h"
 #include "i8080.h"
 #include "AySound.h"
 
+#include "sync.h"
+#include "scaler.h"
 
-extern QueueHandle_t scaler_to_emu;
-extern int v06x_framecount;
-extern int v06x_frame_cycles;
-
-extern QueueHandle_t audio_queue;
 int audiobuf_index;
 extern audio_sample_t * audio_pp[AUDIO_NBUFFERS];
 extern uint8_t * ay_pp[AUDIO_NBUFFERS];
@@ -560,8 +557,8 @@ rowend:
         audio_buf = audio_pp[audiobuf_index];
         AySound::SamplebufAY = ay_pp[audiobuf_index];
 
-        ++v06x_framecount;
-        v06x_frame_cycles = ipixels;
+        ++scaler::v06x_framecount;
+        scaler::v06x_frame_cycles = ipixels;
     }
 
     return maxframes;

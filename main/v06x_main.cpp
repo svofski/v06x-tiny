@@ -24,8 +24,6 @@
 
 extern const char *TAG;
 
-volatile int v06x_framecount = 0;
-
 static Memory * memory;
 static QueueHandle_t que_scaler_to_emu;
 static uint8_t * buf0;
