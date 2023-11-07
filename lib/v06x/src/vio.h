@@ -19,7 +19,6 @@ private:
     uint32_t palette[16];
 
     Memory & kvaz;
-    Keyboard & keyboard;
     I8253 & timer;
     FD1793 & fdc;
     WavPlayer & tape_player;
@@ -43,9 +42,9 @@ public:
     std::function<void(uint32_t,uint8_t)> onwrite;
 
 public:
-    IO(Memory & _memory, Keyboard & _keyboard, I8253 & _timer, FD1793 & _fdc, 
+    IO(Memory & _memory, I8253 & _timer, FD1793 & _fdc, 
             WavPlayer & _tape_player, uint16_t * palette8) 
-        : kvaz(_memory), keyboard(_keyboard), timer(_timer), fdc(_fdc),
+        : kvaz(_memory), timer(_timer), fdc(_fdc),
         tape_player(_tape_player), palette8(palette8),
         CW(0x08), PA(0xff), PB(0xff), PC(0xff), CW2(0), PA2(0xff), PB2(0xff), PC2(0xff)
     {
@@ -82,17 +81,15 @@ public:
                 /* PC.low input ? */
                 auto pclow = (this->CW & 0x01) ? 0x0b : (this->PC & 0x0f);
                 /* PC.high input ? */
-                auto pcupp = (this->CW & 0x08) ? 
-                    ((this->tape_player.sample() << 4) |
-                     (this->keyboard.ss ? 0 : (1 << 5)) |
-                     (this->keyboard.us ? 0 : (1 << 6)) |
-                     (this->keyboard.rus ? 0 : (1 << 7))) : (this->PC & 0xf0);
+                keyboard::update_state();
+                auto pcupp = (this->CW & 0x08) ? ((this->tape_player.sample() << 4) | keyboard::state.pc) : (this->PC & 0xf0);
                 result = pclow | pcupp;
                 }
                 break;
             case 0x02:
                 if ((this->CW & 0x02) != 0) {
-                    result = this->keyboard.read(~this->PA); // input
+                    keyboard::update_state();
+                    result = keyboard::state.rows;
                 } else {
                     result = this->PB;       // output
                 }
@@ -219,8 +216,9 @@ public:
                     this->realoutput(2, 0);
                     this->realoutput(3, 0);
                 }
-                if (((this->PC & 8) != ruslat) && this->onruslat) {
-                    this->onruslat((this->PC & 8) == 0);
+                if ((this->PC & 8) != ruslat) {
+                    keyboard::select_columns(this->PA, this->PC);
+                    if (this->onruslat) this->onruslat((this->PC & 8) == 0);
                 }
                 // if (debug) {
                 //     console.log("output commit cw = ", this->CW.toString(16));
@@ -231,8 +229,9 @@ public:
                 ruslat = this->PC & 8;
                 this->PC = w8;
                 //this->ontapeoutchange(this->PC & 1);
-                if (((this->PC & 8) != ruslat) && this->onruslat) {
-                    this->onruslat((this->PC & 8) == 0);
+                if ((this->PC & 8) != ruslat) {
+                    keyboard::select_columns(this->PA, w8);
+                    if (this->onruslat) this->onruslat((this->PC & 8) == 0);
                 }
                 break;
             case 0x02:
@@ -244,6 +243,7 @@ public:
             case 0x03:
                 this->PIA1_last = w8;
                 this->PA = w8;
+                keyboard::select_columns(w8, this->PC);
                 break;
                 // PPI2
             case 0x04:
@@ -366,15 +366,25 @@ public:
         return this->PA2;
     }
 
+    uint8_t pa() const 
+    {
+        return this->PA;
+    }
+
+    uint8_t pb() const
+    {
+        return this->PB;
+    }
+
+    uint8_t pc() const 
+    {
+        return this->PC;
+    }
+
     IRAM_ATTR
     uint32_t Palette(int index) const
     {
         return this->palette[index];
-    }
-
-    Keyboard & the_keyboard() const
-    {
-        return this->keyboard;
     }
 
     // same as joystick "C", active 0

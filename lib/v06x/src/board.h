@@ -64,7 +64,6 @@ class Board
     void reset(Board::ResetMode blkvvod); // true: power-on reset, false: boot loaded prog
     int get_frame_no() const { return frame_no; }
     void handle_quit();
-    bool terminating() const { return io.the_keyboard().terminate; };
     void interrupt(bool on);
 
     void set_joysticks(int joy_0e, int joy_0f);

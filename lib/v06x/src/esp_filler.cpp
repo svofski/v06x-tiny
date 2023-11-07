@@ -551,8 +551,10 @@ rowend:
             *audio_buf++ = vi53->out_sum() << 10;   // sample audio
         }
 
-        ay_bufpos_reg = ay_bufpos;
+        // just in case nobody polled keyboard, update modkeys
+        keyboard::select_columns(io->pa(), io->pc());
 
+        ay_bufpos_reg = ay_bufpos;
         // post audio buffer index to be taken in by the audio driver
         xQueueSend(::audio_queue, &audiobuf_index,  5 / portTICK_PERIOD_MS);
         if (++audiobuf_index == AUDIO_NBUFFERS) audiobuf_index = 0;

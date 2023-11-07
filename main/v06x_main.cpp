@@ -102,8 +102,10 @@ void v06x_task(void *param)
 
     Wav* wav = new Wav();
     WavPlayer* tape_player = new WavPlayer(*wav);
-    Keyboard* keyboard = new Keyboard();
     I8253* timer = new I8253();
+    
+    // SPI keyboard
+    keyboard::init();
 
     // AY Sound
     AySound::init();
@@ -111,7 +113,7 @@ void v06x_task(void *param)
     AySound::set_stereo(AYEMU_MONO, NULL);
     AySound::reset();
 
-    IO* io = new IO(*memory, *keyboard, *timer, *fdc, *tape_player, esp_filler::palette8());
+    IO* io = new IO(*memory, *timer, *fdc, *tape_player, esp_filler::palette8());
     
     esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer);
     esp_filler::frame_start();    
@@ -126,7 +128,7 @@ void v06x_task(void *param)
         io->yellowblue();
     }
 
-    keyboard->onreset = [board](bool blkvvod) {
+    keyboard::onreset = [board](bool blkvvod) {
         board->reset(blkvvod ? 
                 Board::ResetMode::BLKVVOD : Board::ResetMode::BLKSBR);
     };

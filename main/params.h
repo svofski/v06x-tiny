@@ -17,6 +17,12 @@
 #define I2S_BCLK      0     // was 19 in some revisions of the board
 #define I2S_LRC       18
 
+#define PIN_NUM_CLK             12
+#define PIN_NUM_MISO            13
+#define PIN_NUM_MOSI            11
+#define PIN_NUM_KEYBOARD_SS     19
+#define PIN_NUM_SDCARD_SS       10
+
 #define BOUNCE_NLINES 10 // bounce buffer height: 288 * 10/6 = 480: scale up 6 lines to 10
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

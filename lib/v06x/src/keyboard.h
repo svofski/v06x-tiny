@@ -1,52 +1,37 @@
 #pragma once
 
-#include <inttypes.h>
-#include <string.h>
+#include <cstdint>
 #include <functional>
-#include <map>
 
-class Keyboard
+#include "driver/spi_master.h"
+#include "driver/gpio.h"
+#include "sdkconfig.h"
+#include "esp_log.h"
+
+#include "params.h"
+
+namespace keyboard
 {
-private:
-    uint8_t matrix[8];
-    std::map<int, uint32_t> keymap;
 
-public:
-    bool ss, us, rus;
-    bool terminate;
-    std::function<void(bool)> onreset;
+// mod keys are active low
+constexpr uint8_t PC_BIT_SS = (1<<5);
+constexpr uint8_t PC_BIT_US = (1<<6);
+constexpr uint8_t PC_BIT_RUSLAT = (1<<7);
+constexpr uint8_t PC_MDOKEYS_MASK = (PC_BIT_SS | PC_BIT_US | PC_BIT_RUSLAT);
 
-    Keyboard() : ss(false), us(false), rus(false), terminate(false)
-    {
-        memset(matrix, 0, sizeof(matrix));
-        init_map();
-    }
-
-    int read(int rowbit)
-    {
-        int result = 0;
-        for (int i = 0; i < 8; ++i) {
-            if ((rowbit & 1) != 0) {
-                result |= this->matrix[i];
-            }
-            rowbit >>= 1;
-        }
-        return (~result) & 0377;
-    }
-
-private:
-    void init_map()
-    {
-        // Keyboard encoding matrix:
-        //   │ 7   6   5   4   3   2   1   0
-        // ──┼───────────────────────────────
-        // 7 │SPC  ^   ]   \   [   Z   Y   X
-        // 6 │ W   V   U   T   S   R   Q   P
-        // 5 │ O   N   M   L   K   J   I   H
-        // 4 │ G   F   E   D   C   B   A   @
-        // 3 │ /   .   =   ,   ;   :   9   8
-        // 2 │ 7   6   5   4   3   2   1   0
-        // 1 │F5  F4  F3  F2  F1  AP2 CTP ^\ -
-        // 0 │DN  RT  UP  LT  ЗАБ ВК  ПС  TAB
-    }
+struct keyboard_state_t
+{
+    uint8_t rows;
+    uint8_t pc;
 };
+
+extern std::function<void(bool)> onreset;
+
+extern keyboard_state_t state;
+
+void select_columns(uint8_t pa, uint8_t pc); // out 03 (PA) and forget
+void update_state();  // finalize SPI transaction and update state
+
+void init(void);
+
+}

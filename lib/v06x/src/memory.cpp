@@ -1,6 +1,6 @@
-#include <inttypes.h>
-#include <string.h>
-#include <stdio.h>
+#include <cstdint>
+#include <cstring>
+#include <cstdio>
 #include <vector>
 
 #include "memory.h"
