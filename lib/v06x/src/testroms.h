@@ -57,6 +57,15 @@ extern "C" {
     extern unsigned int kdtest_rom_len;
     extern unsigned char kdadrtst_rom[];
     extern unsigned int kdadrtst_rom_len;
+    extern unsigned char text80_rom[];
+    extern unsigned int text80_rom_len;
+    extern unsigned char dizrek__rom[];
+    extern unsigned int dizrek__rom_len;
+
+    extern unsigned char incurzion_rom[];
+    extern unsigned int incurzion_rom_len;
+    extern unsigned char baskor_rom[];
+    extern unsigned int baskor_rom_len;
 
 }
 

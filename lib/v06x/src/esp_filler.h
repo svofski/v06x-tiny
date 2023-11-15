@@ -31,6 +31,7 @@ namespace esp_filler {
     int fill_void(int ncycles, int commit_time, int commit_time_pal);
     int fill_void_noout(int ncycles);
     int fake_fill(int ncycles, int commit_time, int commit_time_pal);
+    void write_pal(uint8_t adr8, uint8_t rgb);
 
     int bob(int maxframes);
 }

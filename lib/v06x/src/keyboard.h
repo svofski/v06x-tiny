@@ -24,6 +24,8 @@ constexpr uint8_t PC_BIT_RUSLAT =   (1<<7);
 // only the modkeys that go to port C
 constexpr uint8_t PC_MODKEYS_MASK = PC_BIT_SS | PC_BIT_US | PC_BIT_RUSLAT;
 
+constexpr uint8_t PC_BIT_INDRUS =   (1<<3);
+
 struct keyboard_state_t
 {
     uint8_t rows;           // rows input

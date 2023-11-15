@@ -1,9 +1,9 @@
 #include "keyboard.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "i8080.h"
 
 #define SIMULATE_KEY_PRESS 0
-
 // keyboard protocol:
 // 32-bit transaction (MSB, mode 0)
 //  0:  TX port 03 (PA) value, column select        RX: 0xe5
@@ -109,6 +109,7 @@ void read_modkeys()
 void out_ruslat(uint8_t w8)
 {
     state.ruslat = w8;
+    printf("keyboard::out_ruslat: %02x pc=%04x\n", w8, i8080cpu::i8080_pc());
 }
 
 void commit_ruslat()
@@ -119,7 +120,7 @@ void commit_ruslat()
         transaction_active = false;
     }
     transaction.tx_data[0] = 0xe8;
-    transaction.tx_data[1] = state.ruslat;
+    transaction.tx_data[1] = state.ruslat ^ PC_BIT_INDRUS;  // apply inverter D81.3
     ret = spi_device_polling_start(spimatrix, &transaction, portMAX_DELAY);
     transaction_active = true;
 }

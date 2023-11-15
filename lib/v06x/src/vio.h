@@ -29,6 +29,7 @@ private:
     uint8_t CW2, PA2, PB2, PC2;
     uint8_t joy_0e, joy_0f;
 
+public:
     int outport;
     int outbyte;
     int palettebyte;
@@ -320,6 +321,7 @@ public:
         }
     }
 
+    #if 0
     void commit_palette(int index) 
     {
         int w8 = this->palettebyte;
@@ -329,18 +331,11 @@ public:
         }
         if (w8 != -1) {
             //printf("commit_palette: [%d]=%d\n", index, this->palette8[index]);
-            this->palette8[index] = (w8 << 8) | w8;
+            //this->palette8[index] = (w8 << 8) | w8;
+            esp_filler::write_pal(index, w8);
         }
-        // if (w8 != -1) {
-        //     int b = (w8 & 0xc0) >> 6;
-        //     int g = (w8 & 0x38) >> 3;
-        //     int r = (w8 & 0x07);
-
-        //     this->palette[index] = rgb2pixelformat(r,g,b);
-        //     //printf("commit palette: %02x = %02x\n", index, this->palette[index]);
-        //     this->palettebyte = -1;
-        // }
     }
+    #endif
 
     int BorderIndex() const 
     {

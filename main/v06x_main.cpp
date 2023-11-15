@@ -182,11 +182,16 @@ void v06x_task(void *param)
     };
 
     romset_t romset[] = {
-        {&ROM(GameNoname)[0], ROMLEN(GameNoname), 600 * 50 * 0}, // jdundel aeterna
+        //{&ROM(GameNoname)[0], ROMLEN(GameNoname), 600 * 50 * 0}, // jdundel aeterna
         //{&ROM(kdadrtst)[0], ROMLEN(kdadrtst), 60 * 50},
         //{&ROM(kdtest)[0], ROMLEN(kdtest), 60 * 50},
         //{&ROM(testtp)[0], ROMLEN(testtp), 60 * 50},
-        {&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
+        //{&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
+        //{&ROM(incurzion)[0], ROMLEN(incurzion), 0},
+        {&ROM(baskor)[0], ROMLEN(baskor), 0},
+        {&ROM(clrspace)[0], ROMLEN(clrspace), 4 * 50},
+        {&ROM(dizrek_)[0], ROMLEN(dizrek_), 60 * 50},
+        {&ROM(text80)[0], ROMLEN(text80), 60 * 50},
         {&ROM(bas299)[0], ROMLEN(bas299), 60 * 50},
         {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
         {&ROM(ses)[0], ROMLEN(ses), 120 * 50},
@@ -198,7 +203,6 @@ void v06x_task(void *param)
         {&ROM(tiedye2)[0], ROMLEN(tiedye2), 4 * 50},
         {&ROM(spsmerti)[0], ROMLEN(spsmerti), 45 * 50},
         {&ROM(kittham1)[0], ROMLEN(kittham1), 4 * 50},
-        {&ROM(clrspace)[0], ROMLEN(clrspace), 4 * 50},
         {&ROM(eightsnail)[0], ROMLEN(eightsnail), 45 * 50},        
         {&ROM(bord)[0], ROMLEN(bord), 10 * 50},
         {&ROM(bord2)[0], ROMLEN(bord2), 10 * 50},

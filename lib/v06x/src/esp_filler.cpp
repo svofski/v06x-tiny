@@ -89,6 +89,7 @@ int color_index;    // index of color at the tip of the beam
 #ifdef TIMED_COMMIT
 bool commit_pal;
 int commit_io;
+uint8_t palette_byte;
 #endif
 
 volatile int v06x_framecount = 0;
@@ -100,7 +101,51 @@ IO * io;
 I8253 * vi53;
 
 // palette ram
+// index:4 -> {rgb,rgb}
 uint16_t py2[16];
+
+uint16_t py2_512[16];       // mode512 pairs of pixels
+uint16_t py2_256[16];       // mode256 pairs of pixels
+
+void write_pal(uint8_t adr8, uint8_t rgb)
+{
+    // write 256-pixel pal
+    py2_256[adr8] = (rgb << 8) | rgb;
+    // msb zero
+    {
+        uint8_t adr = adr8 & 0x03;
+        // when writing 00xx -> replicate for every combo of msb in lsb pixel
+        py2_512[adr + 0x0] = (py2_512[adr + 0x0] & 0xff00) | rgb;
+        py2_512[adr + 0x4] = (py2_512[adr + 0x4] & 0xff00) | rgb;
+        py2_512[adr + 0x8] = (py2_512[adr + 0x8] & 0xff00) | rgb;
+        py2_512[adr + 0xc] = (py2_512[adr + 0xc] & 0xff00) | rgb;
+    }
+    {
+        uint8_t adr = adr8 & 0x0c;
+        uint16_t rgbshift = rgb << 8;
+        // when writing 00xx -> replicate for every combo of msb in lsb pixel
+        py2_512[adr + 0x0] = (py2_512[adr + 0x0] & 0x00ff) | rgbshift;
+        py2_512[adr + 0x1] = (py2_512[adr + 0x1] & 0x00ff) | rgbshift;
+        py2_512[adr + 0x2] = (py2_512[adr + 0x2] & 0x00ff) | rgbshift;
+        py2_512[adr + 0x3] = (py2_512[adr + 0x3] & 0x00ff) | rgbshift;
+    }
+}
+
+void modechange()
+{
+    if (mode512) {
+        memcpy(py2, py2_512, 16 * 2);
+    }
+    else {
+        memcpy(py2, py2_256, 16 * 2);
+    }
+}
+
+void commit_palette(int index) 
+{
+    esp_filler::write_pal(index, palette_byte);
+    modechange();
+}
 
 void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _vi53)
 {
@@ -122,6 +167,7 @@ void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _
 
     io->onmodechange = [](bool mode) {
         mode512 = mode;
+        modechange();
     };
 
     vi53 = _vi53;
@@ -217,7 +263,7 @@ inline void slab8_pal()
         uint8_t i4 = shiftNicePixels(nicepixels);
         *bmp.bmp16++ = py2[i1];
         *bmp.bmp16++ = py2[i2];
-        if (commit_pal) io->commit_palette(i2); 
+        if (commit_pal) commit_palette(i2); 
         // // if we commit with i2 here, the 8bit snail flickers, clrspace is good
         // // with i1: 8bit snail is good, clrspace is broken
         if (commit_io && --commit_io == 0) {
@@ -248,7 +294,7 @@ void vborderslab()
     uint32_t c = py2[border_index];
     *bmp.bmp32++ = c << 16 | c;
     if (commit_pal) {
-        io->commit_palette(border_index);
+        commit_palette(border_index);
         c = py2[border_index];
     }
     *bmp.bmp32++ = c << 16 | c;
@@ -266,7 +312,7 @@ void borderslab()
 {
     uint16_t c = py2[border_index];
     if (commit_pal) {
-        io->commit_palette(border_index);
+        commit_palette(border_index);
         c = py2[border_index];
     }
     *bmp.bmp16++ = c;
@@ -352,7 +398,7 @@ int bob(int maxframes)
                         #endif
                         ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                         #ifdef TIMED_COMMIT
-                        if (commit_pal) io->commit_palette(border_index);
+                        if (commit_pal) commit_palette(border_index);
                         if (commit_io && --commit_io == 0) {
                             io->commit();
                         }
@@ -415,7 +461,7 @@ int bob(int maxframes)
                     }
                     else {
                         #ifdef TIMED_COMMIT
-                        if (commit_pal) io->commit_palette(border_index);
+                        if (commit_pal) commit_palette(border_index);
                         if (commit_io && --commit_io == 0) {
                             io->commit();
                         }
@@ -505,7 +551,7 @@ int bob(int maxframes)
                     #endif
                     ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                     #ifdef TIMED_COMMIT
-                    if (commit_pal) io->commit_palette(border_index);
+                    if (commit_pal) commit_palette(border_index);
                     if (commit_io && --commit_io == 0) {
                         io->commit();
                     }
@@ -624,6 +670,7 @@ void i8080_hal_io_output(int port, int value)
     }
     else if (port >= 0xc && port <= 0xf) {
         esp_filler::commit_pal = true;      // near-instant
+        esp_filler::palette_byte = value;
     }
     else {
         esp_filler::commit_io = 2;          // border updates with delay
