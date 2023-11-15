@@ -39,12 +39,25 @@ extern "C" {
     extern unsigned int bolderm_rom_len;
     extern unsigned char cronex_rom[];
     extern unsigned int cronex_rom_len;
+    extern unsigned char cyberunp_rom[];
+    extern unsigned int cyberunp_rom_len;
     extern unsigned char cybermut_rom[];
     extern unsigned int cybermut_rom_len;
     extern unsigned char spsmerti_rom[];
     extern unsigned int spsmerti_rom_len;
     extern unsigned char ses_rom[];
     extern unsigned int ses_rom_len;
+    extern unsigned char bas299_rom[];
+    extern unsigned int bas299_rom_len;
+    extern unsigned char GameNoname_rom[];
+    extern unsigned int GameNoname_rom_len;
+    extern unsigned char testtp_rom[];
+    extern unsigned int testtp_rom_len;
+    extern unsigned char kdtest_rom[];
+    extern unsigned int kdtest_rom_len;
+    extern unsigned char kdadrtst_rom[];
+    extern unsigned int kdadrtst_rom_len;
+
 }
 
 #define ROM(X) X##_rom

@@ -2,6 +2,7 @@
 #include "vio.h"
 #include "8253.h"
 #include "globaldefs.h"
+#include <functional>
 
 namespace esp_filler {
     constexpr int center_offset = DEFAULT_CENTER_OFFSET;
@@ -19,6 +20,8 @@ namespace esp_filler {
 
     extern volatile int v06x_framecount;
     extern volatile int v06x_frame_cycles;
+
+    extern std::function<void(ResetMode)> onreset;
 
     uint16_t * palette8();    
     void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * vi53);

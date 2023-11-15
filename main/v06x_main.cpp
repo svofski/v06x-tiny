@@ -107,6 +107,28 @@ void v06x_task(void *param)
     // SPI keyboard
     keyboard::init();
 
+
+#if 0
+    for(;;) {
+        uint8_t rows[8];
+        int shifter = 1;
+        for (int i = 0; i < 8; ++i, shifter <<= 1) {
+            keyboard::select_columns(shifter ^ 0xff);
+            //usleep(100);
+            //vTaskDelay(1);
+            keyboard::update_state();
+            //usleep(50);
+            //vTaskDelay(1);
+            rows[i] = keyboard::state.rows;
+        }
+        for (int i = 0; i < 8; ++i) {
+            printf("%02x ", keyboard::state.rows);
+        }
+        printf("\n");
+        vTaskDelay(50/portTICK_PERIOD_MS);
+    }
+#endif
+
     // AY Sound
     AySound::init();
     AySound::set_sound_format(AUDIO_SAMPLERATE, 1, 8);
@@ -114,13 +136,15 @@ void v06x_task(void *param)
     AySound::reset();
 
     IO* io = new IO(*memory, *timer, *fdc, *tape_player, esp_filler::palette8());
-    
-    esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer);
-    esp_filler::frame_start();    
-
     Board* board = new Board(*memory, *io, *tape_player);
     ESP_LOGI(TAG, "Board: %p", board);
     assert(board);
+
+    esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer);
+    esp_filler::onreset = [board](ResetMode blkvvod) {
+        board->reset(blkvvod);
+    };
+    esp_filler::frame_start();    
 
     board->init();
     fdc->init();
@@ -128,24 +152,19 @@ void v06x_task(void *param)
         io->yellowblue();
     }
 
-    keyboard::onreset = [board](bool blkvvod) {
-        board->reset(blkvvod ? 
-                Board::ResetMode::BLKVVOD : Board::ResetMode::BLKSBR);
-    };
-
     if (Options.autostart) {
         int seq = 0;
         io->onruslat = [&seq,board,io](bool ruslat) {
             seq = (seq << 1) | (ruslat ? 1 : 0);
             if ((seq & 15) == 6) {
-                board->reset(Board::ResetMode::BLKSBR);
+                board->reset(ResetMode::BLKSBR);
                 io->onruslat = nullptr;
             }
         };
     }
     ESP_LOGI(TAG, "Board: %p", board);
 
-    board->reset(Board::ResetMode::BLKVVOD);
+    board->reset(ResetMode::BLKVVOD);
 
     // benchmark_bob(board);
     benchmark_vi53(timer);
@@ -163,11 +182,16 @@ void v06x_task(void *param)
     };
 
     romset_t romset[] = {
+        {&ROM(GameNoname)[0], ROMLEN(GameNoname), 600 * 50 * 0}, // jdundel aeterna
+        //{&ROM(kdadrtst)[0], ROMLEN(kdadrtst), 60 * 50},
+        //{&ROM(kdtest)[0], ROMLEN(kdtest), 60 * 50},
+        //{&ROM(testtp)[0], ROMLEN(testtp), 60 * 50},
+        {&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
+        {&ROM(bas299)[0], ROMLEN(bas299), 60 * 50},
         {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
         {&ROM(ses)[0], ROMLEN(ses), 120 * 50},
         {&ROM(oblitterated)[0], ROMLEN(oblitterated), 110 * 50},
         {&ROM(arzak)[0], ROMLEN(arzak), 2 * 60 * 50},
-        {&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
         {&ROM(cronex)[0], ROMLEN(cronex), 60 * 50},
         {&ROM(progdemo)[0], ROMLEN(progdemo), 130 * 50},
         {&ROM(mclrs)[0], ROMLEN(mclrs), 4 * 50},
@@ -185,14 +209,14 @@ void v06x_task(void *param)
     };
 
     for (int ri = 0;;) {
-        board->reset(Board::ResetMode::BLKVVOD);
+        board->reset(ResetMode::BLKVVOD);
         AySound::reset();
         timer->reset();
         esp_filler::bob(50);
         for (size_t i = 0; i < romset[ri].len; ++i) {
             memory->write(256 + i, romset[ri].rom[i], false);
         }
-        board->reset(Board::ResetMode::BLKSBR);
+        board->reset(ResetMode::BLKSBR);
         printf("loaded rom %d, running %d frames ", ri, romset[ri].nframes);
         esp_filler::bob(romset[ri].nframes);
 

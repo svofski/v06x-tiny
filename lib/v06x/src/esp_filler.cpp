@@ -94,6 +94,8 @@ int commit_io;
 volatile int v06x_framecount = 0;
 volatile int v06x_frame_cycles = 0;
 
+std::function<void(ResetMode)> onreset;
+
 IO * io;
 I8253 * vi53;
 
@@ -552,7 +554,8 @@ rowend:
         }
 
         // just in case nobody polled keyboard, update modkeys
-        keyboard::select_columns(io->pa(), io->pc());
+        keyboard::read_modkeys();
+        keyboard::commit_ruslat();
 
         ay_bufpos_reg = ay_bufpos;
         // post audio buffer index to be taken in by the audio driver
@@ -560,6 +563,13 @@ rowend:
         if (++audiobuf_index == AUDIO_NBUFFERS) audiobuf_index = 0;
         audio_buf = audio::audio_pp[audiobuf_index];
         AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
+
+        if (keyboard::sbros_pressed()) {
+            onreset(ResetMode::BLKSBR);
+        }
+        else if (keyboard::vvod_pressed()) {
+            onreset(ResetMode::BLKVVOD);
+        }
 
         v06x_framecount++;
         v06x_frame_cycles = ipixels;
@@ -593,7 +603,7 @@ void i8080_hal_io_output(int port, int value)
     esp_filler::io->commit_palette(0x0f & esp_filler::color_index);
     #else
     // non-palette i/o
-    if (port == 0x15) {
+    if (port == 0x15 || port == 0x10) {
         esp_filler::io->commit();           // all regular peripherals
     }
     else if (port == 0x14) {

@@ -5,6 +5,7 @@
 #include <functional>
 #include "i8080.h"
 #include "serialize.h"
+#include "globaldefs.h"
 
 class Board;
 
@@ -13,14 +14,6 @@ void create_timer();
 
 class Board
 {
-  public:
-    enum ResetMode
-    {
-        BLKSBR,
-        BLKVVOD,
-        LOADROM
-    };
-
   private:
     int between;
     int instr_time;
@@ -61,7 +54,7 @@ class Board
     Board(Memory& _memory, IO& _io, WavPlayer& _tape_player);
 
     void init();
-    void reset(Board::ResetMode blkvvod); // true: power-on reset, false: boot loaded prog
+    void reset(ResetMode blkvvod); // true: power-on reset, false: boot loaded prog
     int get_frame_no() const { return frame_no; }
     void handle_quit();
     void interrupt(bool on);

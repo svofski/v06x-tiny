@@ -56,7 +56,7 @@ void Board::set_bootrom(const std::vector<uint8_t>& bootbytes)
     printf("Board::set_bootrom boot.size()=%u\n", boot.size());
 }
 
-void Board::reset(Board::ResetMode mode)
+void Board::reset(ResetMode mode)
 {
     switch (mode) {
         case ResetMode::BLKVVOD:

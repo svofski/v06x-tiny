@@ -15,3 +15,10 @@
 #else
 #define TV_PIXELFORMAT SDL_PIXELFORMAT_ARGB8888
 #endif
+
+enum ResetMode
+{
+    BLKSBR,
+    BLKVVOD,
+    LOADROM
+};

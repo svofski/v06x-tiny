@@ -81,15 +81,16 @@ public:
                 /* PC.low input ? */
                 auto pclow = (this->CW & 0x01) ? 0x0b : (this->PC & 0x0f);
                 /* PC.high input ? */
-                keyboard::update_state();
+                //keyboard::read_modkeys();
                 auto pcupp = (this->CW & 0x08) ? ((this->tape_player.sample() << 4) | keyboard::state.pc) : (this->PC & 0xf0);
                 result = pclow | pcupp;
                 }
                 break;
             case 0x02:
                 if ((this->CW & 0x02) != 0) {
-                    keyboard::update_state();
+                    keyboard::read_rows();
                     result = keyboard::state.rows;
+                    ///*if (this->PA == 0xef)*/ printf("%02x %02x\n", this->PA, result);
                 } else {
                     result = this->PB;       // output
                 }
@@ -217,7 +218,7 @@ public:
                     this->realoutput(3, 0);
                 }
                 if ((this->PC & 8) != ruslat) {
-                    keyboard::select_columns(this->PA, this->PC);
+                    keyboard::out_ruslat(this->PC);
                     if (this->onruslat) this->onruslat((this->PC & 8) == 0);
                 }
                 // if (debug) {
@@ -230,7 +231,7 @@ public:
                 this->PC = w8;
                 //this->ontapeoutchange(this->PC & 1);
                 if ((this->PC & 8) != ruslat) {
-                    keyboard::select_columns(this->PA, w8);
+                    keyboard::out_ruslat(this->PC);
                     if (this->onruslat) this->onruslat((this->PC & 8) == 0);
                 }
                 break;
@@ -243,7 +244,7 @@ public:
             case 0x03:
                 this->PIA1_last = w8;
                 this->PA = w8;
-                keyboard::select_columns(w8, this->PC);
+                keyboard::select_columns(w8);
                 break;
                 // PPI2
             case 0x04:
