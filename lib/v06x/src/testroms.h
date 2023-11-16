@@ -66,7 +66,12 @@ extern "C" {
     extern unsigned int incurzion_rom_len;
     extern unsigned char baskor_rom[];
     extern unsigned int baskor_rom_len;
-
+    extern unsigned char hwdit512_rom[];
+    extern unsigned int hwdit512_rom_len;
+    extern unsigned char hiblue7c_rom[];
+    extern unsigned int hiblue7c_rom_len;
+    extern unsigned char mineswep_rom[];
+    extern unsigned int mineswep_rom_len;
 }
 
 #define ROM(X) X##_rom

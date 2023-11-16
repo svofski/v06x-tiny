@@ -111,19 +111,21 @@ void write_pal(uint8_t adr8, uint8_t rgb)
 {
     // write 256-pixel pal
     py2_256[adr8] = (rgb << 8) | rgb;
-    // msb zero
-    {
+    // 512-pixel pal (different odd/even columns)
+    if (adr8 <= 3) {
+        // even columns 0, 2, ...
         uint8_t adr = adr8 & 0x03;
-        // when writing 00xx -> replicate for every combo of msb in lsb pixel
+        // replicate for every combo of msb in lsb pixel
         py2_512[adr + 0x0] = (py2_512[adr + 0x0] & 0xff00) | rgb;
         py2_512[adr + 0x4] = (py2_512[adr + 0x4] & 0xff00) | rgb;
         py2_512[adr + 0x8] = (py2_512[adr + 0x8] & 0xff00) | rgb;
         py2_512[adr + 0xc] = (py2_512[adr + 0xc] & 0xff00) | rgb;
     }
-    {
+    if ((adr8 & 3) == 0) {
+        // odd columns 1, 3, ...
         uint8_t adr = adr8 & 0x0c;
         uint16_t rgbshift = rgb << 8;
-        // when writing 00xx -> replicate for every combo of msb in lsb pixel
+        // replicate for every combo of lsb in msb pixel
         py2_512[adr + 0x0] = (py2_512[adr + 0x0] & 0x00ff) | rgbshift;
         py2_512[adr + 0x1] = (py2_512[adr + 0x1] & 0x00ff) | rgbshift;
         py2_512[adr + 0x2] = (py2_512[adr + 0x2] & 0x00ff) | rgbshift;
@@ -141,10 +143,19 @@ void modechange()
     }
 }
 
+void print_palette()
+{
+    for (int i = 0; i < 16; ++i) {
+        printf("[%d]=%04x ", i, py2_512[i]);
+    }
+    printf("\n");
+}
+
 void commit_palette(int index) 
 {
     esp_filler::write_pal(index, palette_byte);
     modechange();
+    //printf("[%02x]=%02x ", index, palette_byte);
 }
 
 void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _vi53)

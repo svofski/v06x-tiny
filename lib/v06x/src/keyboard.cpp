@@ -109,7 +109,7 @@ void read_modkeys()
 void out_ruslat(uint8_t w8)
 {
     state.ruslat = w8;
-    printf("keyboard::out_ruslat: %02x pc=%04x\n", w8, i8080cpu::i8080_pc());
+    //printf("keyboard::out_ruslat: %02x pc=%04x\n", w8, i8080cpu::i8080_pc());
 }
 
 void commit_ruslat()
