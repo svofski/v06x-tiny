@@ -188,12 +188,13 @@ void v06x_task(void *param)
         //{&ROM(testtp)[0], ROMLEN(testtp), 60 * 50},
         //{&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
         //{&ROM(incurzion)[0], ROMLEN(incurzion), 0},
-        {&ROM(mineswep)[0], ROMLEN(mineswep), 60 * 50},
-        {&ROM(hiblue7c)[0], ROMLEN(hiblue7c), 60 * 50},
-        {&ROM(hwdit512)[0], ROMLEN(hwdit512), 60 * 50},
+        {&ROM(dizrek_)[0], ROMLEN(dizrek_), 60 * 50}, // needs at least 600s to finish, slowdown and flickering near the end
+        {&ROM(mineswep)[0], ROMLEN(mineswep), 15 * 50},
+        {&ROM(hscroll)[0], ROMLEN(hscroll), 10 * 50},
+        {&ROM(hiblue7c)[0], ROMLEN(hiblue7c), 15 * 50},
+        {&ROM(hwdit512)[0], ROMLEN(hwdit512), 15 * 50},
         {&ROM(baskor)[0], ROMLEN(baskor), 15 * 50},
         {&ROM(clrspace)[0], ROMLEN(clrspace), 4 * 50},
-        {&ROM(dizrek_)[0], ROMLEN(dizrek_), 60 * 50},
         {&ROM(text80)[0], ROMLEN(text80), 60 * 50},
         {&ROM(bas299)[0], ROMLEN(bas299), 60 * 50},
         {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
@@ -212,7 +213,6 @@ void v06x_task(void *param)
         {&ROM(bazis)[0], ROMLEN(bazis), 60 * 50},
         {&ROM(sunsetb)[0], ROMLEN(sunsetb), 15 * 50},
         {&ROM(wave)[0], ROMLEN(wave), 75 * 50},
-        {&ROM(hscroll)[0], ROMLEN(hscroll), 10 * 50},
     };
 
     for (int ri = 0;;) {
