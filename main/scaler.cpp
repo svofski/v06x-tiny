@@ -4,6 +4,7 @@
 
 #include "sdkconfig.h"
 #include "driver/gpio.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -53,17 +54,11 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
 void allocate_buffers()
 {
 
-#ifdef BOUNCE_BUFFERS_APART
-    // make a large gap between bounce buffers,  hoping that they are in different banks
-    uint8_t * evilbuf = static_cast<uint8_t *>(heap_caps_malloc((BUFCOLUMNS * 5 * sizeof(uint8_t) + 32) * 2 + 32768, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)); // alignment offset for main screen area
-    bounce_buf8[0] = &evilbuf[6];
-    bounce_buf8[1] = &evilbuf[32768 + 6];
-#else
     bounce_buf8[0] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 6 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)) + 6; // alignment offset for main screen area
     assert(bounce_buf8[0]);
     bounce_buf8[1] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 6 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)) + 6; // alignment offset for main screen area
     assert(bounce_buf8[1]);
-#endif
+
     memset(bounce_buf8[0], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
     memset(bounce_buf8[1], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
     ESP_LOGI(TAG, "Created frame buffers: buf8[0]=%p buf8[1]=%p", bounce_buf8[0], bounce_buf8[1]);
@@ -300,9 +295,6 @@ void create_lcd_driver_task(void *pvParameter)
             .vsync_pulse_width = 4,
             .vsync_back_porch = 8,
             .vsync_front_porch = 8,
-            // .vsync_pulse_width = 32,
-            // .vsync_back_porch = 16,
-            // .vsync_front_porch = 16,
             .flags = {
                 .hsync_idle_low = 1,
                 .vsync_idle_low = 1,
@@ -379,7 +371,6 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
     frameduration_us = esp_timer_get_time() - lastframe_us;
     lastframe_us = esp_timer_get_time();
 
-    //esp_lcd_rgb_panel_restart(panel);
     BaseType_t high_task_awoken = pdFALSE;
     if (xSemaphoreTakeFromISR(sem_gui_ready, &high_task_awoken) == pdTRUE) {
         xSemaphoreGiveFromISR(sem_vsync_end, &high_task_awoken);
