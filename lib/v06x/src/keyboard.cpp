@@ -21,6 +21,7 @@ static spi_device_handle_t spimatrix;
 
 static spi_transaction_t transaction;
 
+// spi bus must be initialised!
 void init()
 {
     state.blk = BLK_MASK;
@@ -28,31 +29,21 @@ void init()
     state.rows = 0xff;
     state.ruslat = 0;
 
-    spi_bus_config_t buscfg = {
-        .mosi_io_num = PIN_NUM_MOSI,
-        .miso_io_num = PIN_NUM_MISO,
-        .sclk_io_num = PIN_NUM_CLK,
-        .quadwp_io_num = -1,
-        .quadhd_io_num = -1,
-        .max_transfer_sz = 4, // 4 bytes
-    };
-
     spi_device_interface_config_t devcfg = {
         .mode = 0, // should be mode 3 because rp2040 spi is so broken, but somehow mode 0 seems to work better
+        .cs_ena_pretrans = 5,
         .clock_speed_hz = 8000000,      // 8mhz seems to be the limit
         .spics_io_num = PIN_NUM_KEYBOARD_SS,
         .queue_size = 1,
     };
 
-    esp_err_t ret = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_DISABLED);
-    ESP_ERROR_CHECK(ret);
-    ret = spi_bus_add_device(SPI2_HOST, &devcfg, &spimatrix);
+    esp_err_t ret = spi_bus_add_device(SPI2_HOST, &devcfg, &spimatrix);
     ESP_ERROR_CHECK(ret);
 
     transaction_active = false;
     transaction = {};
     transaction.flags = SPI_TRANS_USE_RXDATA | SPI_TRANS_USE_TXDATA;
-    transaction.length = 24; // 3 bytes: command, idle, response
+    transaction.length = 16; // 3 bytes: command, idle, response
 }
 
 void select_columns(uint8_t pa)
@@ -85,12 +76,10 @@ void read_rows()
     }
     transaction.tx_data[0] = 0xe6;
     transaction.tx_data[1] = 0;
-    transaction.tx_data[2] = 0;
     
     ret = spi_device_polling_transmit(spimatrix, &transaction);
-    //state.pc = 0xff & PC_MODKEYS_MASK;//transaction.rx_data[0];
-    state.rows = transaction.rx_data[2];
-    //printf("%02x %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1], transaction.rx_data[2]);
+    state.rows = transaction.rx_data[1];
+    //printf("rx: %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1]);
 }
 
 void read_modkeys()
@@ -102,8 +91,9 @@ void read_modkeys()
     }
     transaction.tx_data[0] = 0xe7;
     ret = spi_device_polling_transmit(spimatrix, &transaction);
-    state.pc = transaction.rx_data[2] & PC_MODKEYS_MASK;
-    state.blk = transaction.rx_data[2] & BLK_MASK;
+    
+    state.pc = transaction.rx_data[0] & PC_MODKEYS_MASK;
+    state.blk = transaction.rx_data[0] & BLK_MASK;
 }
 
 void out_ruslat(uint8_t w8)

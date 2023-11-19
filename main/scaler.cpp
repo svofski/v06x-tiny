@@ -25,6 +25,7 @@
 
 #define C8TO16(c)   (((((c) & 7) * 4) << 11) | (((((c) >> 3) & 7) * 8) << 5) | ((((c) >> 6) & 3) * 8))
 
+#define DITHER_FRAMES 1
 
 extern QueueHandle_t scaler_to_emu;
 
@@ -220,6 +221,150 @@ fillcolumn_h54_v106(uint16_t * col, uint32_t * src)
         //ofs += LCD_H_RES;  // dst_line = 10
 }
 
+// fill one block with scaling up
+// scaler 5/4 horizontal, 8/5 vertical, or 4x5 -> 6x8
+// bgr233 532x300 -> rgb565 798x480
+static void IRAM_ATTR 
+fillcolumn_h54_v106_dither_a(uint16_t * col, uint32_t * src)
+{
+    int ofs = 0;
+
+    // column: [0.0, 0.6, 1.2, 1.8, 2.4, 3.0, 3.6, 4.2, 4.8, 5.4]
+    uint32_t s4_0 = src[0];
+    uint32_t s4_1 = src[BUFCOLUMNS * 1 / 4];
+    uint32_t s4_2 = src[BUFCOLUMNS * 2 / 4];
+    uint32_t s4_3 = src[BUFCOLUMNS * 3 / 4];
+    uint32_t s4_4 = src[BUFCOLUMNS * 4 / 4];
+    uint32_t s4_5 = src[BUFCOLUMNS * 5 / 4];
+
+    uint16_t c16_1;
+    uint16_t c16_2;
+    uint16_t c16_3;
+    uint16_t c16_4;
+
+    // y + 0
+    c16_1 = C8TO16(s4_0 >> 0);      
+    c16_2 = C8TO16(s4_0 >> 8);
+    c16_3 = C8TO16(s4_0 >> 16);
+    c16_4 = C8TO16(s4_0 >> 24);
+        // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
+        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 1
+    // y + 0.6, y + 1.2
+    c16_1 = C8TO16(s4_1 >> 0);
+    c16_2 = C8TO16(s4_1 >> 8);
+    c16_3 = C8TO16(s4_1 >> 16);
+    c16_4 = C8TO16(s4_1 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;   // dst_line = 2
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;   // dst_line = 3
+    // y + 1.8, y + 2.4
+    c16_1 = C8TO16(s4_2 >> 0);
+    c16_2 = C8TO16(s4_2 >> 8);
+    c16_3 = C8TO16(s4_2 >> 16);
+    c16_4 = C8TO16(s4_2 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 4
+        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 5
+    // y = 3.0
+    c16_1 = C8TO16(s4_3 >> 0);
+    c16_2 = C8TO16(s4_3 >> 8);
+    c16_3 = C8TO16(s4_3 >> 16);
+    c16_4 = C8TO16(s4_3 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 6
+    // y + 3.6, y + 4.2
+    c16_1 = C8TO16(s4_4 >> 0);
+    c16_2 = C8TO16(s4_4 >> 8);
+    c16_3 = C8TO16(s4_4 >> 16);
+    c16_4 = C8TO16(s4_4 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 7
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 8
+    // y + 4.8, y + 5.4
+    c16_1 = C8TO16(s4_5 >> 0);
+    c16_2 = C8TO16(s4_5 >> 8);
+    c16_3 = C8TO16(s4_5 >> 16);
+    c16_4 = C8TO16(s4_5 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 9
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
+        //ofs += LCD_H_RES;  // dst_line = 10
+}
+
+static void IRAM_ATTR 
+fillcolumn_h54_v106_dither_b(uint16_t * col, uint32_t * src)
+{
+    int ofs = 0;
+
+    // column: [0.0, 0.6, 1.2, 1.8, 2.4, 3.0, 3.6, 4.2, 4.8, 5.4]
+    uint32_t s4_0 = src[0];
+    uint32_t s4_1 = src[BUFCOLUMNS * 1 / 4];
+    uint32_t s4_2 = src[BUFCOLUMNS * 2 / 4];
+    uint32_t s4_3 = src[BUFCOLUMNS * 3 / 4];
+    uint32_t s4_4 = src[BUFCOLUMNS * 4 / 4];
+    uint32_t s4_5 = src[BUFCOLUMNS * 5 / 4];
+
+    uint16_t c16_1;
+    uint16_t c16_2;
+    uint16_t c16_3;
+    uint16_t c16_4;
+
+    // y + 0
+    c16_1 = C8TO16(s4_0 >> 0);      
+    c16_2 = C8TO16(s4_0 >> 8);
+    c16_3 = C8TO16(s4_0 >> 16);
+    c16_4 = C8TO16(s4_0 >> 24);
+        // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 1
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;   // dst_line = 2
+    // y + 0.6, y + 1.2
+    c16_1 = C8TO16(s4_1 >> 0);
+    c16_2 = C8TO16(s4_1 >> 8);
+    c16_3 = C8TO16(s4_1 >> 16);
+    c16_4 = C8TO16(s4_1 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;   // dst_line = 3
+    // y + 1.8, y + 2.4
+    c16_1 = C8TO16(s4_2 >> 0);
+    c16_2 = C8TO16(s4_2 >> 8);
+    c16_3 = C8TO16(s4_2 >> 16);
+    c16_4 = C8TO16(s4_2 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 4
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 5
+    // y = 3.0
+    c16_1 = C8TO16(s4_3 >> 0);
+    c16_2 = C8TO16(s4_3 >> 8);
+    c16_3 = C8TO16(s4_3 >> 16);
+    c16_4 = C8TO16(s4_3 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 6
+        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 7
+    // y + 3.6, y + 4.2
+    c16_1 = C8TO16(s4_4 >> 0);
+    c16_2 = C8TO16(s4_4 >> 8);
+    c16_3 = C8TO16(s4_4 >> 16);
+    c16_4 = C8TO16(s4_4 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 8
+    // y + 4.8, y + 5.4
+    c16_1 = C8TO16(s4_5 >> 0);
+    c16_2 = C8TO16(s4_5 >> 8);
+    c16_3 = C8TO16(s4_5 >> 16);
+    c16_4 = C8TO16(s4_5 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 9
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
+}
+
 constexpr int NTUTU = 150;
 static int tutu_i = -1;
 static uint64_t tutu[NTUTU];
@@ -227,6 +372,8 @@ static int tutu_pos_px[NTUTU];
 static int tutu_len_bytes[NTUTU];
 static int tutu_frm = 0;
 static int tutu_frm_reg = 0;
+
+static int dither_cnt = 0;
 
 static bool IRAM_ATTR 
 on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px, int len_bytes, void *user_ctx)
@@ -266,9 +413,25 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
         bbuf += LCD_H_RES * 2;
     }
 
-    for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4) {
+    #if DITHER_FRAMES
+    if ((framecount & 1) == 0) {
+        for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
+        {
+            fillcolumn_h54_v106_dither_a(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
+        }
+    }
+    else {
+        for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
+        {
+            fillcolumn_h54_v106_dither_b(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
+        }
+    }
+    #else
+    for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
+    {
         fillcolumn_h54_v106(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
     }
+#endif
 
     // flip buffers for the next time
     read_buffer_index ^= 1;

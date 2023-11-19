@@ -11,18 +11,21 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+
 #include "esp_timer.h"
 #include "driver/gpio.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_task_wdt.h"
 
+#include "spibus.h"
 #include "AySound.h"
 #include "v06x_main.h"
 #include "esp_filler.h"
 #include "scaler.h"
 #include "audio.h"
 #include "sync.h"
+#include "sdcard.h"
 
 #include "params.h"
 
@@ -58,8 +61,20 @@ void app_main(void)
 
     audio::create_pinned_to_core();
 
+    // initialize spi bus before keyboard and sdcard
+    SPIBus spi_bus{};
+
     v06x::init(scaler_to_emu, scaler::bounce_buf8[0], scaler::bounce_buf8[1]);
     v06x::create_pinned_to_core();
+
+    // let the keyboard finish SPI transaction if we were reset
+    keyboard::read_rows();
+
+    //vTaskDelay(pdMS_TO_TICKS(200));
+    SDCard sdcard{};
+    sdcard.mount();
+    sdcard.test();
+
     
     int last_frame_cycles = 0;
     while (1) {        

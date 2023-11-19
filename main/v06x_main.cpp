@@ -114,18 +114,15 @@ void v06x_task(void *param)
         int shifter = 1;
         for (int i = 0; i < 8; ++i, shifter <<= 1) {
             keyboard::select_columns(shifter ^ 0xff);
-            //usleep(100);
-            //vTaskDelay(1);
-            keyboard::update_state();
-            //usleep(50);
-            //vTaskDelay(1);
+            keyboard::read_rows();
             rows[i] = keyboard::state.rows;
         }
+        keyboard::read_modkeys();
         for (int i = 0; i < 8; ++i) {
-            printf("%02x ", keyboard::state.rows);
+            printf("%02x ", rows[i]);
         }
-        printf("\n");
-        vTaskDelay(50/portTICK_PERIOD_MS);
+        printf(" mods=%02x\n", keyboard::state.pc);
+        vTaskDelay(100/portTICK_PERIOD_MS);
     }
 #endif
 
@@ -188,15 +185,16 @@ void v06x_task(void *param)
         //{&ROM(testtp)[0], ROMLEN(testtp), 60 * 50},
         //{&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
         //{&ROM(incurzion)[0], ROMLEN(incurzion), 0},
-        {&ROM(dizrek_)[0], ROMLEN(dizrek_), 60 * 50}, // needs at least 600s to finish, slowdown and flickering near the end
+        //{&ROM(bas299)[0], ROMLEN(bas299), 60 * 50},
+        //{&ROM(baskor)[0], ROMLEN(baskor), 0 * 15 * 50},
         {&ROM(mineswep)[0], ROMLEN(mineswep), 15 * 50},
+        {&ROM(hwdit512)[0], ROMLEN(hwdit512), 15 * 50},
+        {&ROM(bazis)[0], ROMLEN(bazis), 60 * 50},
+        {&ROM(dizrek_)[0], ROMLEN(dizrek_), 60 * 50}, // needs at least 600s to finish, slowdown and flickering near the end
         {&ROM(hscroll)[0], ROMLEN(hscroll), 10 * 50},
         {&ROM(hiblue7c)[0], ROMLEN(hiblue7c), 15 * 50},
-        {&ROM(hwdit512)[0], ROMLEN(hwdit512), 15 * 50},
-        {&ROM(baskor)[0], ROMLEN(baskor), 15 * 50},
         {&ROM(clrspace)[0], ROMLEN(clrspace), 4 * 50},
         {&ROM(text80)[0], ROMLEN(text80), 60 * 50},
-        {&ROM(bas299)[0], ROMLEN(bas299), 60 * 50},
         {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
         {&ROM(ses)[0], ROMLEN(ses), 120 * 50},
         {&ROM(oblitterated)[0], ROMLEN(oblitterated), 110 * 50},
@@ -210,7 +208,6 @@ void v06x_task(void *param)
         {&ROM(eightsnail)[0], ROMLEN(eightsnail), 45 * 50},        
         {&ROM(bord)[0], ROMLEN(bord), 10 * 50},
         {&ROM(bord2)[0], ROMLEN(bord2), 10 * 50},
-        {&ROM(bazis)[0], ROMLEN(bazis), 60 * 50},
         {&ROM(sunsetb)[0], ROMLEN(sunsetb), 15 * 50},
         {&ROM(wave)[0], ROMLEN(wave), 75 * 50},
     };
