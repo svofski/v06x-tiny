@@ -22,6 +22,7 @@
 #include "scaler.h"
 #include "sync.h"
 #include "esp_filler.h"
+#include "osd.h"
 
 #define C8TO16(c)   (((((c) & 7) * 4) << 11) | (((((c) >> 3) & 7) * 8) << 5) | ((((c) >> 6) & 3) * 8))
 
@@ -41,6 +42,9 @@ user_context_t user_context;
 
 uint32_t read_buffer_index;
 uint8_t * bounce_buf8[2];
+
+//uint16_t** osd_buf16;
+OSD * osd;
 
 volatile int framecount = 0;
 volatile uint64_t lastframe_us = 0;
@@ -63,7 +67,6 @@ void allocate_buffers()
     memset(bounce_buf8[0], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
     memset(bounce_buf8[1], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
     ESP_LOGI(TAG, "Created frame buffers: buf8[0]=%p buf8[1]=%p", bounce_buf8[0], bounce_buf8[1]);
-
 }
 
 void create_pinned_to_core()
@@ -221,11 +224,83 @@ fillcolumn_h54_v106(uint16_t * col, uint32_t * src)
         //ofs += LCD_H_RES;  // dst_line = 10
 }
 
+// hscale 1:1
+static void IRAM_ATTR 
+fillcolumn_h11_v106(uint16_t * col, uint32_t * src)
+{
+    int ofs = 0;
+
+    // column: [0.0, 0.6, 1.2, 1.8, 2.4, 3.0, 3.6, 4.2, 4.8, 5.4]
+    uint32_t s4_0 = src[0];
+    uint32_t s4_1 = src[BUFCOLUMNS * 1 / 4];
+    uint32_t s4_2 = src[BUFCOLUMNS * 2 / 4];
+    uint32_t s4_3 = src[BUFCOLUMNS * 3 / 4];
+    uint32_t s4_4 = src[BUFCOLUMNS * 4 / 4];
+    uint32_t s4_5 = src[BUFCOLUMNS * 5 / 4];
+
+    uint16_t c16_1;
+    uint16_t c16_2;
+    uint16_t c16_3;
+    uint16_t c16_4;
+
+    // y + 0
+    c16_1 = C8TO16(s4_0 >> 0);      
+    c16_2 = C8TO16(s4_0 >> 8);
+    c16_3 = C8TO16(s4_0 >> 16);
+    c16_4 = C8TO16(s4_0 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 1
+    // y + 0.6, y + 1.2
+    c16_1 = C8TO16(s4_1 >> 0);
+    c16_2 = C8TO16(s4_1 >> 8);
+    c16_3 = C8TO16(s4_1 >> 16);
+    c16_4 = C8TO16(s4_1 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;   // dst_line = 2
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;   // dst_line = 3
+    // y + 1.8, y + 2.4
+    c16_1 = C8TO16(s4_2 >> 0);
+    c16_2 = C8TO16(s4_2 >> 8);
+    c16_3 = C8TO16(s4_2 >> 16);
+    c16_4 = C8TO16(s4_2 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 4
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 5
+    // y = 3.0
+    c16_1 = C8TO16(s4_3 >> 0);
+    c16_2 = C8TO16(s4_3 >> 8);
+    c16_3 = C8TO16(s4_3 >> 16);
+    c16_4 = C8TO16(s4_3 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 6
+    // y + 3.6, y + 4.2
+    c16_1 = C8TO16(s4_4 >> 0);
+    c16_2 = C8TO16(s4_4 >> 8);
+    c16_3 = C8TO16(s4_4 >> 16);
+    c16_4 = C8TO16(s4_4 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 7
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 8
+    // y + 4.8, y + 5.4
+    c16_1 = C8TO16(s4_5 >> 0);
+    c16_2 = C8TO16(s4_5 >> 8);
+    c16_3 = C8TO16(s4_5 >> 16);
+    c16_4 = C8TO16(s4_5 >> 24);
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        ofs += LCD_H_RES;  // dst_line = 9
+        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4;
+        //ofs += LCD_H_RES;  // dst_line = 10
+}
+
+
 // fill one block with scaling up
 // scaler 5/4 horizontal, 8/5 vertical, or 4x5 -> 6x8
 // bgr233 532x300 -> rgb565 798x480
 static void IRAM_ATTR 
-fillcolumn_h54_v106_dither_a(uint16_t * col, uint32_t * src)
+fillcolumn_h54_v106_dither_a(uint16_t * col, const uint32_t * src)
 {
     int ofs = 0;
 
@@ -373,7 +448,37 @@ static int tutu_len_bytes[NTUTU];
 static int tutu_frm = 0;
 static int tutu_frm_reg = 0;
 
-static int dither_cnt = 0;
+static void IRAM_ATTR
+copy_osd(uint16_t * bounce16, int lcd_y)
+{
+    OSD::Color** osd_srcbuf = osd->framebuffer();
+    int osdx = osd->x;
+    int osdy_first = osd->y;
+    int osdy_last = osd->y + (osd->height << 1);
+    int osd_w = osd->width;
+
+    for (int i = 0; i < BOUNCE_NLINES; ++i)
+    {
+        if ((i & 1) == 0 && lcd_y + i >= osdy_first && lcd_y + i < osdy_last)
+        {
+            // convert 8-bit bgr233 osd buffer to double-scanned native 16-bit rgb565
+            uint16_t *dst = bounce16 + i * LCD_H_RES + osdx;
+            uint16_t *dst2 = dst + LCD_H_RES; // scandouble of the go
+            uint8_t *src = osd_srcbuf[(lcd_y + i - osdy_first) >> 1];
+            for (int j = 0; j < osd_w; j += 2)
+            {
+                uint8_t c1 = *src++;
+                uint8_t c2 = *src++;
+                uint16_t c16_1 = C8TO16(c1);
+                uint16_t c16_2 = C8TO16(c2);
+                *dst++ = c16_1;
+                *dst++ = c16_2;
+                *dst2++ = c16_1;
+                *dst2++ = c16_2;
+            }
+        }
+    }
+}
 
 static bool IRAM_ATTR 
 on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px, int len_bytes, void *user_ctx)
@@ -402,36 +507,53 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
 
     uint8_t * bbuf = static_cast<uint8_t *>(bounce_buf);
 
-    for (int i = 0; i < BOUNCE_NLINES; ++i) {
-        #ifdef DEBUG_BOUNCE_BUFFERS
-        memset(bbuf, 0xff && read_buffer_index, border_w << 1);
-        if (pos_px == 0) memset(bbuf, 0xffff, 16);
-        #else
-        memset(bbuf, 0, border_w << 1);
-        #endif
-        memset(bbuf + 2 * BUFCOLUMNS * 5/4 + (border_w << 1), 0, (border_w << 1) + 2); // extra pixel because border_w is odd
-        bbuf += LCD_H_RES * 2;
+    if (!osd) {
+        for (int i = 0; i < BOUNCE_NLINES; ++i)
+        {
+#ifdef DEBUG_BOUNCE_BUFFERS
+            memset(bbuf, 0xff && read_buffer_index, border_w << 1);
+            if (pos_px == 0)
+                memset(bbuf, 0xffff, 16);
+#else
+            memset(bbuf, 0, border_w << 1);
+#endif
+            memset(bbuf + 2 * BUFCOLUMNS * 5 / 4 + (border_w << 1), 0, (border_w << 1) + 2); // extra pixel because border_w is odd
+            bbuf += LCD_H_RES * 2;
+        }
+
+#if DITHER_FRAMES
+        if ((framecount & 1) == 0)
+        {
+            for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
+            {
+                fillcolumn_h54_v106_dither_a(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
+            }
+        }
+        else
+        {
+            for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
+            {
+                fillcolumn_h54_v106_dither_b(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
+            }
+        }
+#else
+        for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
+        {
+            fillcolumn_h54_v106(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
+        }
+#endif
     }
 
-    #if DITHER_FRAMES
-    if ((framecount & 1) == 0) {
-        for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
-        {
-            fillcolumn_h54_v106_dither_a(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
-        }
-    }
     else {
-        for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
-        {
-            fillcolumn_h54_v106_dither_b(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
+        // copy v06c framebuffer with 1:1 horz scale
+        for (int dst_x = 0, src_x = 0; dst_x + 4 <= BUFCOLUMNS; dst_x += 4, src_x += 4) {
+            fillcolumn_h11_v106(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
         }
+
+        // copy osd buffer with 2x vert scale
+        int lcd_y = pos_px / LCD_H_RES;
+        copy_osd(bounce16, lcd_y);
     }
-    #else
-    for (int dst_x = border_w, src_x = 0; dst_x + 5 < LCD_H_RES - border_w; dst_x += 5, src_x += 4)
-    {
-        fillcolumn_h54_v106(bounce16 + dst_x, reinterpret_cast<uint32_t *>(buf8 + src_x));
-    }
-#endif
 
     // flip buffers for the next time
     read_buffer_index ^= 1;
@@ -542,5 +664,9 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
     return high_task_awoken == pdTRUE;
 }
 
+void show_osd(OSD * _osd)
+{
+    osd = _osd;
+}
 
 }

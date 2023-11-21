@@ -14,7 +14,10 @@
 namespace keyboard
 {
 
-keyboard_state_t state;
+keyboard_state_t state;         // main state
+keyboard_state_t io_state;      // gated io state (all off when osd is showing)
+
+bool osd_enable;
 
 static bool transaction_active;
 static spi_device_handle_t spimatrix;
@@ -24,15 +27,18 @@ static spi_transaction_t transaction;
 // spi bus must be initialised!
 void init()
 {
+    osd_enable = false;
+
     state.blk = BLK_MASK;
     state.pc = PC_MODKEYS_MASK;
     state.rows = 0xff;
     state.ruslat = 0;
+    io_state = state;
 
     spi_device_interface_config_t devcfg = {
         .mode = 0, // should be mode 3 because rp2040 spi is so broken, but somehow mode 0 seems to work better
-        .cs_ena_pretrans = 5,
-        .clock_speed_hz = 8000000,      // 8mhz seems to be the limit
+        .cs_ena_pretrans = 6,
+        .clock_speed_hz = 9000000,      // 8mhz seems to be the limit
         .spics_io_num = PIN_NUM_KEYBOARD_SS,
         .queue_size = 1,
     };
@@ -51,21 +57,14 @@ void select_columns(uint8_t pa)
     if (transaction_active) {
         spi_device_polling_end(spimatrix, portMAX_DELAY);
         transaction_active = false;
-        //assert(false);
-        //return;
     }
     transaction.tx_data[0] = 0xe5; 
     transaction.tx_data[1] = pa;
 
-    //for (int i = 0; i < 4; ++i) transaction.rx_data[i] = 0;
     esp_err_t ret = spi_device_polling_start(spimatrix, &transaction, portMAX_DELAY);
     transaction_active = ret == ESP_OK;
     ESP_ERROR_CHECK(ret);
 }
-
-#if SIMULATE_KEY_PRESS
-static int dummyctr = 0;
-#endif
 
 void read_rows()
 {
@@ -92,8 +91,15 @@ void read_modkeys()
     transaction.tx_data[0] = 0xe7;
     ret = spi_device_polling_transmit(spimatrix, &transaction);
     
+    //printf("m: %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1]);
     state.pc = transaction.rx_data[0] & PC_MODKEYS_MASK;
     state.blk = transaction.rx_data[0] & BLK_MASK;
+
+    // update io modkeys automatically
+    if (!osd_enable) {
+        io_state.pc = state.pc;
+        io_state.blk = state.blk;
+    }
 }
 
 void out_ruslat(uint8_t w8)
@@ -123,6 +129,45 @@ bool vvod_pressed()
 bool sbros_pressed()
 {
     return (state.blk & BLK_MASK) == (BLK_MASK & ~BLK_BIT_SBROS); // SBROS without VVOD
+}
+
+
+void io_select_columns(uint8_t pa)
+{
+    if (!osd_enable) select_columns(pa);
+}
+
+void io_read_rows()
+{
+    if (!osd_enable) {
+        read_rows(); // because spi slave is broken
+        read_rows();
+        io_state.rows = state.rows;
+    }
+}
+
+void io_read_modkeys()
+{
+    if (!osd_enable) {
+        read_modkeys();
+        io_state.pc = state.pc;
+        io_state.blk = state.blk;
+        //printf("io_m: pc=%02x blk=%02x\n", io_state.pc, io_state.blk);
+    }
+}
+
+void io_out_ruslat(uint8_t w8)
+{
+    if (!osd_enable) out_ruslat(w8);
+}
+
+// when osd takes over keyboard control, block all io_*() calls
+void osd_takeover(bool enable)
+{
+    osd_enable = enable;
+    io_state.blk = BLK_MASK;
+    io_state.pc = PC_MODKEYS_MASK;
+    io_state.rows = 0xff;
 }
 
 }

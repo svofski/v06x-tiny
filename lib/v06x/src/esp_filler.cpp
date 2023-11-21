@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 
 #include "esp_timer.h"
 #include "esp_attr.h"
@@ -95,7 +96,10 @@ uint8_t palette_byte;
 volatile int v06x_framecount = 0;
 volatile int v06x_frame_cycles = 0;
 
+volatile int usrus_holdframes = 0;
+
 std::function<void(ResetMode)> onreset;
+std::function<void(void)> onosd;
 
 IO * io;
 I8253 * vi53;
@@ -611,8 +615,18 @@ rowend:
         }
 
         // just in case nobody polled keyboard, update modkeys
-        keyboard::read_modkeys();
+        keyboard::read_modkeys(); 
         keyboard::commit_ruslat();
+
+        if ((keyboard::state.pc & keyboard::PC_MODKEYS_MASK) == ((keyboard::PC_BIT_US | keyboard::PC_BIT_RUSLAT) ^ keyboard::PC_MODKEYS_MASK)) {
+            usrus_holdframes++;
+            if (usrus_holdframes == 50 && onosd) {
+                onosd();
+            }
+        }
+        else {
+            usrus_holdframes = 0;
+        }
 
         ay_bufpos_reg = ay_bufpos;
         // post audio buffer index to be taken in by the audio driver
@@ -635,10 +649,10 @@ rowend:
     return maxframes;
 }
 
-uint16_t * palette8()
-{
-    return py2;
-}
+//uint16_t * palette8()
+//{
+//    return py2;
+//}
 
 }
 

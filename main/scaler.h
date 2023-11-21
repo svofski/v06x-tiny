@@ -1,5 +1,7 @@
 #pragma once
 
+#include "osd.h"
+
 namespace scaler
 {
 
@@ -12,5 +14,7 @@ extern uint8_t * bounce_buf8[2];
 void allocate_buffers();
 void create_pinned_to_core();
 void main_screen_turn_on();
+
+void show_osd(OSD * osd);
 
 }

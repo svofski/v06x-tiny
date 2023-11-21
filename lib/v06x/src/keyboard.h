@@ -35,6 +35,15 @@ struct keyboard_state_t
 };
 
 extern keyboard_state_t state;
+extern keyboard_state_t io_state;
+
+void io_select_columns(uint8_t pa);
+void io_read_rows();
+void io_read_modkeys();
+void io_out_ruslat(uint8_t w8);
+
+// when osd takes over keyboard control, block all io_*() calls
+void osd_takeover(bool enable);
 
 void select_columns(uint8_t pa); // out 03 (PA) and forget
 void read_rows();  // finalize SPI transaction and update state

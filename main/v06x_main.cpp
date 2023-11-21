@@ -132,7 +132,7 @@ void v06x_task(void *param)
     AySound::set_stereo(AYEMU_MONO, NULL);
     AySound::reset();
 
-    IO* io = new IO(*memory, *timer, *fdc, *tape_player, esp_filler::palette8());
+    IO* io = new IO(*memory, *timer, *fdc, *tape_player);
     Board* board = new Board(*memory, *io, *tape_player);
     ESP_LOGI(TAG, "Board: %p", board);
     assert(board);
@@ -145,10 +145,6 @@ void v06x_task(void *param)
 
     board->init();
     fdc->init();
-    if (Options.bootpalette) {
-        io->yellowblue();
-    }
-
     if (Options.autostart) {
         int seq = 0;
         io->onruslat = [&seq,board,io](bool ruslat) {
@@ -185,8 +181,9 @@ void v06x_task(void *param)
         //{&ROM(testtp)[0], ROMLEN(testtp), 60 * 50},
         //{&ROM(bolderm)[0], ROMLEN(bolderm), 60 * 50},
         //{&ROM(incurzion)[0], ROMLEN(incurzion), 0},
-        //{&ROM(bas299)[0], ROMLEN(bas299), 60 * 50},
+        {&ROM(bas299)[0], ROMLEN(bas299), 0 * 60 * 50},
         //{&ROM(baskor)[0], ROMLEN(baskor), 0 * 15 * 50},
+        {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
         {&ROM(mineswep)[0], ROMLEN(mineswep), 15 * 50},
         {&ROM(hwdit512)[0], ROMLEN(hwdit512), 15 * 50},
         {&ROM(bazis)[0], ROMLEN(bazis), 60 * 50},
@@ -195,7 +192,6 @@ void v06x_task(void *param)
         {&ROM(hiblue7c)[0], ROMLEN(hiblue7c), 15 * 50},
         {&ROM(clrspace)[0], ROMLEN(clrspace), 4 * 50},
         {&ROM(text80)[0], ROMLEN(text80), 60 * 50},
-        {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
         {&ROM(ses)[0], ROMLEN(ses), 120 * 50},
         {&ROM(oblitterated)[0], ROMLEN(oblitterated), 110 * 50},
         {&ROM(arzak)[0], ROMLEN(arzak), 2 * 60 * 50},

@@ -5,8 +5,8 @@
  */
 
 #include <stdio.h>
-#include <string.h>
-#include <math.h>
+#include <cstring>
+#include <cmath>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -26,6 +26,8 @@
 #include "audio.h"
 #include "sync.h"
 #include "sdcard.h"
+
+#include "osd.h"
 
 #include "params.h"
 
@@ -53,19 +55,42 @@ void app_main(void)
     scaler::allocate_buffers();
     audio::allocate_buffers();
 
+    OSD osd;
+    osd.init(256, 240); // scandoubled osd
+    osd.x = 532;
+    osd.y = 0;
+    osd.test(); // draw a circle
+    bool osd_showing = false;
+
     // init scaler task on core 1 to pin scaler to core 1
     scaler::create_pinned_to_core();
     scaler::main_screen_turn_on();
+    //scaler::show_osd(&osd);
 
     vTaskDelay(pdMS_TO_TICKS(500));
 
     audio::create_pinned_to_core();
+
 
     // initialize spi bus before keyboard and sdcard
     SPIBus spi_bus{};
 
     v06x::init(scaler_to_emu, scaler::bounce_buf8[0], scaler::bounce_buf8[1]);
     v06x::create_pinned_to_core();
+
+    // show/hide OSD when US+RUS is pressed for 1s
+    esp_filler::onosd = [&osd, &osd_showing]() {
+        if (!osd_showing) {
+            scaler::show_osd(&osd);
+        }
+        else {
+            scaler::show_osd(nullptr);
+        }
+        osd_showing = !osd_showing;
+        keyboard::osd_takeover(osd_showing);
+        printf("OSD takeover=%d\n", osd_showing);
+    };
+
 
     // let the keyboard finish SPI transaction if we were reset
     keyboard::read_rows();
@@ -75,31 +100,22 @@ void app_main(void)
     sdcard.mount();
     sdcard.test();
 
+    ESP_LOGI(TAG, "After all allocations: remaining DRAM: %u\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    ESP_LOGI(TAG, "After all allocations: remaining PSRAM: %u\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
     
     int last_frame_cycles = 0;
     while (1) {        
         xSemaphoreGive(sem_gui_ready);
         xSemaphoreTake(sem_vsync_end, portMAX_DELAY);
         ++frame_no;
+        if (osd_showing) {
+            osd.frame();
+        }
 
-        // if (index_d >= NSAMP) {
-        //     for (int i = 0; i < NSAMP; ++i) {
-        //         printf("%d pos_px=%d len_bytes=%d\n", i, pos_px_d[i], len_bytes_d[i]);
-        //     }
-        // }
-        
         if (frame_no % 50 == 0) {
             printf("fps=%d v06x_fps=%d cycles=%d frame dur=%lluus\n",
                 scaler::fps, scaler::v06x_fps, (esp_filler::v06x_frame_cycles - last_frame_cycles) / 50, scaler::frameduration_us);
             last_frame_cycles = esp_filler::v06x_frame_cycles;
         }
-        
-        // if (tutu_i == NTUTU) {
-        //         printf("0: len=%d line=%d\n", tutu_len_bytes[0], tutu_pos_px[0]/LCD_H_RES);
-        //         for (int i = 1; i < NTUTU; ++i) printf("%2d: t=%lld line=%d l=%d\n", i, tutu[i] - tutu[i-1], tutu_pos_px[i]/LCD_H_RES, tutu_len_bytes[i]);
-        //         tutu_i = -1;
-        //         putchar('\n');
-        // }
-
     }
 }

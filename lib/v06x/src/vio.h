@@ -16,14 +16,10 @@
 
 class IO {
 private:
-    uint32_t palette[16];
-
     Memory & kvaz;
     I8253 & timer;
     FD1793 & fdc;
     WavPlayer & tape_player;
-
-    uint16_t * palette8; // uint8_t[16]
 
     uint8_t CW, PA, PB, PC, PIA1_last;
     uint8_t CW2, PA2, PB2, PC2;
@@ -44,29 +40,13 @@ public:
 
 public:
     IO(Memory & _memory, I8253 & _timer, FD1793 & _fdc, 
-            WavPlayer & _tape_player, uint16_t * palette8) 
+            WavPlayer & _tape_player) 
         : kvaz(_memory), timer(_timer), fdc(_fdc),
-        tape_player(_tape_player), palette8(palette8),
+        tape_player(_tape_player),
         CW(0x08), PA(0xff), PB(0xff), PC(0xff), CW2(0), PA2(0xff), PB2(0xff), PC2(0xff)
     {
-        for (unsigned i = 0; i < sizeof(palette)/sizeof(palette[0]); ++i) {
-            palette[i] = 0xff000000;
-        }
         outport = outbyte = palettebyte = -1;
         joy_0e = joy_0f = 0xff;
-    }
-
-    void yellowblue()
-    {
-        // Create boot-time yellow/blue yeblette using correct pixelformat
-        for (int i = 0; i < 16; ++i) {
-            if (i & 2) {
-                this->palette[i] = rgb2pixelformat(5, 5, 0); 
-            } 
-            else {
-                this->palette[i] = rgb2pixelformat(0, 0, 2); 
-            }
-        }
     }
 
     int input(int port)
@@ -82,15 +62,14 @@ public:
                 /* PC.low input ? */
                 auto pclow = (this->CW & 0x01) ? 0x0b : (this->PC & 0x0f);
                 /* PC.high input ? */
-                //keyboard::read_modkeys();
-                auto pcupp = (this->CW & 0x08) ? ((this->tape_player.sample() << 4) | keyboard::state.pc) : (this->PC & 0xf0);
+                auto pcupp = (this->CW & 0x08) ? ((this->tape_player.sample() << 4) | keyboard::io_state.pc) : (this->PC & 0xf0);
                 result = pclow | pcupp;
                 }
                 break;
             case 0x02:
                 if ((this->CW & 0x02) != 0) {
-                    keyboard::read_rows();
-                    result = keyboard::state.rows;
+                    keyboard::io_read_rows();
+                    result = keyboard::io_state.rows;
                     ///*if (this->PA == 0xef)*/ printf("%02x %02x\n", this->PA, result);
                 } else {
                     result = this->PB;       // output
@@ -219,7 +198,7 @@ public:
                     this->realoutput(3, 0);
                 }
                 if ((this->PC & 8) != ruslat) {
-                    keyboard::out_ruslat(this->PC);
+                    keyboard::io_out_ruslat(this->PC);
                     if (this->onruslat) this->onruslat((this->PC & 8) == 0);
                 }
                 // if (debug) {
@@ -232,7 +211,7 @@ public:
                 this->PC = w8;
                 //this->ontapeoutchange(this->PC & 1);
                 if ((this->PC & 8) != ruslat) {
-                    keyboard::out_ruslat(this->PC);
+                    keyboard::io_out_ruslat(this->PC);
                     if (this->onruslat) this->onruslat((this->PC & 8) == 0);
                 }
                 break;
@@ -245,7 +224,7 @@ public:
             case 0x03:
                 this->PIA1_last = w8;
                 this->PA = w8;
-                keyboard::select_columns(w8);
+                keyboard::io_select_columns(w8);
                 break;
                 // PPI2
             case 0x04:
@@ -321,22 +300,6 @@ public:
         }
     }
 
-    #if 0
-    void commit_palette(int index) 
-    {
-        int w8 = this->palettebyte;
-        if (w8 == -1 && (this->outport >= 0x0c && this->outport <= 0x0f)) {
-            w8 = this->outbyte;
-            this->outport = this->outbyte = -1;
-        }
-        if (w8 != -1) {
-            //printf("commit_palette: [%d]=%d\n", index, this->palette8[index]);
-            //this->palette8[index] = (w8 << 8) | w8;
-            esp_filler::write_pal(index, w8);
-        }
-    }
-    #endif
-
     int BorderIndex() const 
     {
         return this->PB & 0x0f;
@@ -377,12 +340,6 @@ public:
         return this->PC;
     }
 
-    IRAM_ATTR
-    uint32_t Palette(int index) const
-    {
-        return this->palette[index];
-    }
-
     // same as joystick "C", active 0
     void set_joysticks(int j0e, int j0f)
     {
@@ -404,8 +361,6 @@ public:
     void serialize(std::vector<uint8_t> & to)
     {
         std::vector<uint8_t> tmp;
-        uint8_t * palette_bytes = reinterpret_cast<uint8_t *>(palette);
-        tmp.insert(tmp.end(), palette_bytes, palette_bytes + sizeof(palette));
         tmp.push_back(CW);
         tmp.push_back(PA);
         tmp.push_back(PB);
@@ -421,8 +376,6 @@ public:
 
     void deserialize(std::vector<uint8_t>::iterator it, uint32_t size)
     {
-        std::copy(it, it + sizeof(this->palette), reinterpret_cast<uint8_t *>(this->palette));
-        it += sizeof(palette);
         CW = *it++;
         PA = *it++;
         PB = *it++;
