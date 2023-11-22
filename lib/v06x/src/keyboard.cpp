@@ -17,6 +17,10 @@ namespace keyboard
 keyboard_state_t state;         // main state
 keyboard_state_t io_state;      // gated io state (all off when osd is showing)
 
+// matrix for osd-mode: 8 rows + mods
+matrix_t rows;
+matrix_t last_rows;
+
 bool osd_enable;
 
 static bool transaction_active;
@@ -50,6 +54,10 @@ void init()
     transaction = {};
     transaction.flags = SPI_TRANS_USE_RXDATA | SPI_TRANS_USE_TXDATA;
     transaction.length = 16; // 3 bytes: command, idle, response
+
+    for (size_t i = 0; i < rows.size(); ++i) {
+        rows[i] = last_rows[i] = 0xff;
+    }
 }
 
 void select_columns(uint8_t pa)
@@ -178,6 +186,138 @@ void osd_takeover(bool enable)
     io_state.blk = BLK_MASK;
     io_state.pc = PC_MODKEYS_MASK;
     io_state.rows = 0xff;
+}
+
+void scan_matrix()
+{
+    int shifter = 1;
+    for (int i = 0; i < 8; ++i, shifter <<= 1)
+    {
+        keyboard::select_columns(shifter ^ 0xff);
+        keyboard::read_rows();
+        rows[i] = keyboard::state.rows;
+    }
+    keyboard::read_modkeys();
+    rows[8] = keyboard::state.pc | keyboard::state.blk;
+}
+
+// Keyboard encoding matrix:
+//   │ 7   6   5   4   3   2   1   0
+// ──┼───────────────────────────────
+// 7 │SPC  ^   ]   \   [   Z   Y   X
+// 6 │ W   V   U   T   S   R   Q   P
+// 5 │ O   N   M   L   K   J   I   H
+// 4 │ G   F   E   D   C   B   A   @
+// 3 │ /   .   =   ,   ;   :   9   8
+// 2 │ 7   6   5   4   3   2   1   0
+// 1 │F5  F4  F3  F2  F1  AP2 CTP ^\ -
+// 0 │DN  RT  UP  LT  ЗАБ ВК  ПС  TAB
+
+/* scancode, column|bit, char  */
+static int keymap_tab[] = {
+        SCANCODE_RUSLAT,        0x880,  0,      // rus/lat
+        SCANCODE_US,            0x840,  0,      // ctrl
+        SCANCODE_SS,            0x820,  0,      // shift
+        0,                      0,      0,
+        0,                      0,      0,
+        0,                      0,      0,
+        SCANCODE_SBROS,         0x802,  0,      // blk+sbr
+        SCANCODE_VVOD,          0x801,  0,      // blk+vvod
+        
+        SCANCODE_SPACE,         0x780,  ' ',
+        SCANCODE_GRAVE,         0x740,  '^',
+        SCANCODE_RIGHTBRACKET,  0x720,  ']',
+        SCANCODE_BACKSLASH,     0x710,  '\\',
+        SCANCODE_LEFTBRACKET,   0x708,  '[',
+        SCANCODE_Z,             0x704,  'Z',
+        SCANCODE_Y,             0x702,  'Y',
+        SCANCODE_X,             0x701,  'X',
+
+        SCANCODE_W,             0x680,  'W',
+        SCANCODE_V,             0x640,  'V',
+        SCANCODE_U,             0x620,  'U',
+        SCANCODE_T,             0x610,  'T',
+        SCANCODE_S,             0x608,  'S',
+        SCANCODE_R,             0x604,  'R',
+        SCANCODE_Q,             0x602,  'Q',
+        SCANCODE_P,             0x601,  'P',
+
+        SCANCODE_O,             0x580,  'O',
+        SCANCODE_N,             0x540,  'N',
+        SCANCODE_M,             0x520,  'M',
+        SCANCODE_L,             0x510,  'L',
+        SCANCODE_K,             0x508,  'K',
+        SCANCODE_J,             0x504,  'J',
+        SCANCODE_I,             0x502,  'I',
+        SCANCODE_H,             0x501,  'H',
+
+        SCANCODE_G,             0x480,  'G',
+        SCANCODE_F,             0x440,  'F',
+        SCANCODE_E,             0x420,  'E',
+        SCANCODE_D,             0x410,  'D',
+        SCANCODE_C,             0x408,  'C',
+        SCANCODE_B,             0x404,  'B',
+        SCANCODE_A,             0x402,  'A',
+        SCANCODE_AT,            0x401,  '@',
+
+        SCANCODE_SLASH,         0x380,  '/',
+        SCANCODE_PERIOD,        0x340,  '.',
+        SCANCODE_MINUS,         0x320,  '-',
+        SCANCODE_COMMA,         0x310,  ',',
+        SCANCODE_SEMICOLON,     0x308,  ';',
+        SCANCODE_APOSTROPHE,    0x304,  '\'',
+        SCANCODE_9,             0x302,  '9',
+        SCANCODE_8,             0x301,  '8',
+
+        SCANCODE_7,             0x280,  '7',
+        SCANCODE_6,             0x240,  '6',
+        SCANCODE_5,             0x220,  '5',
+        SCANCODE_4,             0x210,  '4',
+        SCANCODE_3,             0x208,  '3',
+        SCANCODE_2,             0x204,  '2',
+        SCANCODE_1,             0x202,  '1',
+        SCANCODE_0,             0x201,  '0',
+
+        SCANCODE_F5,            0x180,  25, 
+        SCANCODE_F4,            0x140,  24,
+        SCANCODE_F3,            0x120,  23,
+        SCANCODE_F2,            0x110,  22,
+        SCANCODE_F1,            0x108,  21,
+        SCANCODE_AR2,           0x104,  27,     // esc
+        SCANCODE_STR,           0x102,  1,
+        SCANCODE_HOME,          0x101,  12,     // form feed
+
+        SCANCODE_DOWN,          0x080,  2,
+        SCANCODE_RIGHT,         0x040,  3,
+        SCANCODE_UP,            0x020,  4,
+        SCANCODE_LEFT,          0x010,  5,
+        SCANCODE_BACKSPACE,     0x008,  8,      // backspace
+        SCANCODE_RETURN,        0x004,  13,     // carriage return
+        SCANCODE_PS,            0x002,  10,     // line feed
+        SCANCODE_TAB,           0x001,  9       // tab
+
+};
+
+void detect_changes()
+{
+    for (int col = 0; col < rows.size(); ++col) {
+        uint8_t changed_bits = rows[col] ^ last_rows[col];
+        if (changed_bits == 0)
+            continue;
+        // there is a change
+        for (uint8_t b = 0, shitf = 0x80; b < 8; ++b, shitf >>= 1) {
+            if (changed_bits & shitf) {
+                bool make = last_rows[col] & shitf; // was 1 now 0 --> make
+                int map_index = ((8 - col) * 8 + b) * 3;
+                int scancode = keymap_tab[map_index];
+                int charcode = keymap_tab[map_index + 2];
+
+                printf("%2d %3d '%c' %s\n", scancode, charcode, charcode > 31 ? charcode : 0, make ? "make" : "break");
+            }
+        }
+    }
+
+    last_rows = rows;
 }
 
 }

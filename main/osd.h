@@ -43,8 +43,6 @@ public:
         Color text = gfx.RGB(255, 255, 255);
         Color black = gfx.RGB(0, 0, 0);
 
-        printf("BGR233: R=%02x G=%02x B=%02x bg=%02x fg=%02x text=%02x\n", gfx.RGB(255, 0, 0), gfx.RGB(0, 255, 0), gfx.RGB(0, 0, 255),
-            bg, fg, text);
         gfx.fillRect(0, 0, gfx.xres, gfx.yres, bg);
         gfx.fillCircle(0, 0, gfx.xres/2, fg);
         gfx.setTextColor(text, black);
@@ -58,24 +56,19 @@ public:
 
     void frame()
     {
-        uint8_t rows[8];
-        int shifter = 1;
-        for (int i = 0; i < 8; ++i, shifter <<= 1) {
-            keyboard::select_columns(shifter ^ 0xff);
-            keyboard::read_rows(); 
-            rows[i] = keyboard::state.rows;
-        }
-        keyboard::read_modkeys();
+        keyboard::scan_matrix();
         gfx.setCursor(0, 29 * gfx.font->charHeight);
         for (int i = 0; i < 8; ++i) {
             //printf("%02x ", rows[i]);
-            gfx.print(rows[i], 16, 2);
+            gfx.print(keyboard::rows[i], 16, 2);
             gfx.print(" ");
         }
-        keyboard::read_modkeys();
+        //keyboard::read_modkeys();
         gfx.print("M:");
         gfx.print(keyboard::state.pc, 16, 2);
         gfx.show();
+
+        keyboard::detect_changes();
     }
 };
 
