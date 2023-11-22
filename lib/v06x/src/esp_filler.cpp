@@ -614,9 +614,8 @@ rowend:
             *audio_buf++ = vi53->out_sum() << 10;   // sample audio
         }
 
-        // just in case nobody polled keyboard, update modkeys
-        keyboard::read_modkeys(); 
-        keyboard::commit_ruslat();
+        keyboard::io_commit_ruslat();
+        keyboard::io_read_modkeys(); 
 
         if ((keyboard::state.pc & keyboard::PC_MODKEYS_MASK) == ((keyboard::PC_BIT_US | keyboard::PC_BIT_RUSLAT) ^ keyboard::PC_MODKEYS_MASK)) {
             usrus_holdframes++;

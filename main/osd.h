@@ -62,7 +62,6 @@ public:
         int shifter = 1;
         for (int i = 0; i < 8; ++i, shifter <<= 1) {
             keyboard::select_columns(shifter ^ 0xff);
-            keyboard::read_rows(); // purge slave's tx fifo
             keyboard::read_rows(); 
             rows[i] = keyboard::state.rows;
         }

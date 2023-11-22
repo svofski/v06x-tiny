@@ -68,15 +68,19 @@ void select_columns(uint8_t pa)
 
 void read_rows()
 {
-    esp_err_t ret;
     if (transaction_active) {
-        ret = spi_device_polling_end(spimatrix, portMAX_DELAY);
+        spi_device_polling_end(spimatrix, portMAX_DELAY);
         transaction_active = false;
     }
     transaction.tx_data[0] = 0xe6;
     transaction.tx_data[1] = 0;
-    
-    ret = spi_device_polling_transmit(spimatrix, &transaction);
+
+    // while i can't figure a better way to flush tx fifo on slave, we perform double reads, second one's a charm
+    // to improve performance of two back-to-back transactions, acquire bus
+    spi_device_acquire_bus(spimatrix, portMAX_DELAY);
+    spi_device_polling_transmit(spimatrix, &transaction);
+    spi_device_polling_transmit(spimatrix, &transaction);
+    spi_device_release_bus(spimatrix);
     state.rows = transaction.rx_data[1];
     //printf("rx: %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1]);
 }
@@ -94,12 +98,12 @@ void read_modkeys()
     //printf("m: %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1]);
     state.pc = transaction.rx_data[0] & PC_MODKEYS_MASK;
     state.blk = transaction.rx_data[0] & BLK_MASK;
-
-    // update io modkeys automatically
-    if (!osd_enable) {
-        io_state.pc = state.pc;
-        io_state.blk = state.blk;
-    }
+//
+//    // update io modkeys automatically
+//    if (!osd_enable) {
+//        io_state.pc = state.pc;
+//        io_state.blk = state.blk;
+//    }
 }
 
 void out_ruslat(uint8_t w8)
@@ -132,15 +136,16 @@ bool sbros_pressed()
 }
 
 
+IRAM_ATTR
 void io_select_columns(uint8_t pa)
 {
     if (!osd_enable) select_columns(pa);
 }
 
+IRAM_ATTR
 void io_read_rows()
 {
     if (!osd_enable) {
-        read_rows(); // because spi slave is broken
         read_rows();
         io_state.rows = state.rows;
     }
@@ -159,6 +164,11 @@ void io_read_modkeys()
 void io_out_ruslat(uint8_t w8)
 {
     if (!osd_enable) out_ruslat(w8);
+}
+
+void io_commit_ruslat()
+{
+    if (!osd_enable) commit_ruslat();
 }
 
 // when osd takes over keyboard control, block all io_*() calls
