@@ -105,11 +105,14 @@ public:
         return ret == ESP_OK;
     }
 
-    ssize_t get_filesize(std::string path)
+    ssize_t get_filesize(const std::string& path)
     {
         struct stat st;
-        if (stat(path.c_str(), &st) == 0) {
-           return st.st_size;
+        for (int nretries = 0; nretries < SDCARD_NRETRIES; ++nretries) {
+            if (stat(path.c_str(), &st) == 0) {
+                return st.st_size;
+            }
+            vTaskDelay(1);
         }
         return -1;
     }
@@ -127,54 +130,48 @@ public:
         dirs.push_back(root);
 
         while (dirs.size() > 0) {
+            printf("remaining dirs: %d\n", dirs.size());
             std::string dirpath = dirs.back();
             DIR *dir = opendir(dirpath.c_str());
             dirs.pop_back();
 
-            if (dir == nullptr)
-            {
+            if (dir == nullptr) {
                 printf("%s: could not open " MOUNT_POINT_SD V06C_DIR "\n", __PRETTY_FUNCTION__);
-                return;
+                continue;
             }
 
             printf("Reading directory: %s\n", dirpath.c_str());
             dirent *dent = readdir(dir);
-            for (; dent != nullptr;)
-            {
-                if (dent->d_type == DT_REG)
-                {
+            for (; dent != nullptr;) {
+                if (dent->d_type == DT_REG) {
                     std::string name{dent->d_name};
                     AssetKind kind = AssetStorage::guess_kind(name);
-                    if (kind != AK_UNKNOWN)
-                    {
+                    if (kind != AK_UNKNOWN) {
                         std::string path{dirpath + '/' + name};
                         FileInfo fi{
                             .name = name,
                             .fullpath = path,
-                            .size = -1 // get_filesize(path)
+                            .size = -1 //get_filesize(path)
                         };
 
                         storage.files[kind].emplace_back(fi);
                         printf("%s %s %s\n", fi.fullpath.c_str(), fi.name.c_str(), fi.size_string().c_str());
                     }
                 }
-                else if (dent->d_type == DT_DIR)
-                {
+                else if (dent->d_type == DT_DIR) {
                     std::string subdir = dirpath + "/" + std::string{dent->d_name};
                     dirs.push_back(subdir); // push into dirs to read later
                 }
                 dent = readdir(dir);
             }
             closedir(dir);
-
-            printf("remaining dirs: %d\n", dirs.size());
         }
         printf("read_dirs done\n");
     }
 
     void create_pinned_to_core()
     {
-        xTaskCreatePinnedToCore(&SDCard::sdcard_task, "sdcard", 1024*4, this, configMAX_PRIORITIES - 6, NULL, SDCARD_CORE);
+        xTaskCreatePinnedToCore(&SDCard::sdcard_task, "sdcard", 1024*4, this, SDCARD_PRIORITY, NULL, SDCARD_CORE);
     }
 
     static void sdcard_task(void * _self)

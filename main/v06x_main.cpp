@@ -42,7 +42,7 @@ void init(QueueHandle_t from_scaler, uint8_t * _buf0, uint8_t * _buf1)
 
 void create_pinned_to_core()
 {
-    xTaskCreatePinnedToCore(&v06x_task, "v06x", 1024*6, NULL, configMAX_PRIORITIES - 1, NULL, EMU_CORE);
+    xTaskCreatePinnedToCore(&v06x_task, "v06x", 1024*6, NULL, EMU_PRIORITY, NULL, EMU_CORE);
 }
 
 void benchmark_bob(Board * board)
@@ -104,8 +104,8 @@ void v06x_task(void *param)
     WavPlayer* tape_player = new WavPlayer(*wav);
     I8253* timer = new I8253();
     
-    // SPI keyboard
-    keyboard::init();
+    //// SPI keyboard
+    //keyboard::init();
 
 
 #if 0
@@ -160,7 +160,7 @@ void v06x_task(void *param)
     board->reset(ResetMode::BLKVVOD);
 
     // benchmark_bob(board);
-    benchmark_vi53(timer);
+    //benchmark_vi53(timer);
     //benchmark(board);
     //test_loop(board);
 
@@ -184,8 +184,8 @@ void v06x_task(void *param)
         //{&ROM(bas299)[0], ROMLEN(bas299), 0 * 60 * 50},
         //{&ROM(baskor)[0], ROMLEN(baskor), 0 * 15 * 50},
         {&ROM(bazis)[0], ROMLEN(bazis), 0 * 60 * 50},
-        {&ROM(mineswep)[0], ROMLEN(mineswep), 30 * 50},
         {&ROM(text80)[0], ROMLEN(text80), 60 * 50},
+        {&ROM(mineswep)[0], ROMLEN(mineswep), 30 * 50},
         {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
         {&ROM(hwdit512)[0], ROMLEN(hwdit512), 15 * 50},
         //{&ROM(dizrek_)[0], ROMLEN(dizrek_), 60 * 50}, // needs at least 600s to finish, slowdown and flickering near the end

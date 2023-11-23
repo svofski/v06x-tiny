@@ -74,6 +74,9 @@ void app_main(void)
     // initialize spi bus before keyboard and sdcard
     SPIBus spi_bus{};
 
+    // SPI keyboard
+    keyboard::init();
+
     v06x::init(scaler_to_emu, scaler::bounce_buf8[0], scaler::bounce_buf8[1]);
     v06x::create_pinned_to_core();
 

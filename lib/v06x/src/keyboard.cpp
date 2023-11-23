@@ -312,7 +312,7 @@ void detect_changes()
                 int scancode = keymap_tab[map_index];
                 int charcode = keymap_tab[map_index + 2];
 
-                printf("%2d %3d '%c' %s\n", scancode, charcode, charcode > 31 ? charcode : 0, make ? "make" : "break");
+                //printf("%2d %3d '%c' %s\n", scancode, charcode, charcode > 31 ? charcode : 0, make ? "make" : "break");
             }
         }
     }

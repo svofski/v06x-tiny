@@ -91,7 +91,7 @@ void allocate_buffers()
 
 void create_pinned_to_core()
 {
-    xTaskCreatePinnedToCore(&audio_task, "audio task", 1024*4, NULL, configMAX_PRIORITIES - 2, NULL, AUDIO_CORE);
+    xTaskCreatePinnedToCore(&audio_task, "audio task", 1024*4, NULL, AUDIO_PRIORITY, NULL, AUDIO_CORE);
 }
 
 }

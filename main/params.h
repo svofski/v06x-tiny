@@ -5,6 +5,11 @@
 #define AUDIO_CORE      0            // ideally should be a core separate from the emulator, but there's some sync problem
 #define SDCARD_CORE     0
 
+#define SCALER_PRIORITY (configMAX_PRIORITIES - 1)
+#define EMU_PRIORITY    (configMAX_PRIORITIES - 1)
+#define AUDIO_PRIORITY  (configMAX_PRIORITIES - 2)
+#define SDCARD_PRIORITY (configMAX_PRIORITIES - 4)
+
 #define AUDIO_NBUFFERS 4
 
 #define VI53_HIGH_FREQ_MUTE 1   // mute frequencies that are too high for our samplerate
@@ -68,8 +73,8 @@
 
 #define LCD_NUM_FB 0
 
-#define SDCARD_FREQ_KHZ         12000 // 8MHz sdcard spi
-
+#define SDCARD_FREQ_KHZ         20000 // 8MHz sdcard spi
+#define SDCARD_NRETRIES         5
 extern const char * TAG;
 
 typedef int16_t audio_sample_t;

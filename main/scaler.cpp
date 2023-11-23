@@ -71,7 +71,7 @@ void allocate_buffers()
 
 void create_pinned_to_core()
 {
-    xTaskCreatePinnedToCore(&create_lcd_driver_task, "lcd_init_task", 1024*4, NULL, configMAX_PRIORITIES - 1, NULL, SCALER_CORE);
+    xTaskCreatePinnedToCore(&create_lcd_driver_task, "scaler_task", 1024*4, NULL, SCALER_PRIORITY, NULL, SCALER_CORE);
     xSemaphoreGive(sem_gui_ready);
     xSemaphoreTake(sem_vsync_end, portMAX_DELAY);
 }
