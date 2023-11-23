@@ -46,15 +46,23 @@ class GraphicsBGR233: public Graphics<uint8_t>
 		backBuffer[y][x] = color;
 	}
 
+	inline bool in_cliprect(int x, int y)
+	{
+		return (x >= clip_rect.x && x < clip_rect.x + clip_rect.w &&
+			y >= clip_rect.y && y < clip_rect.y + clip_rect.h);
+	}
+
 	virtual void dot(int x, int y, Color color)
 	{
-		if ((unsigned int)x < xres && (unsigned int)y < yres)
+		//if ((unsigned int)x < xres && (unsigned int)y < yres)
+		if (in_cliprect(x, y)) 
 			backBuffer[y][x] = color;
 	}
 
 	virtual void dotAdd(int x, int y, Color color)
 	{
-		if ((unsigned int)x < xres && (unsigned int)y < yres)
+		//if ((unsigned int)x < xres && (unsigned int)y < yres)
+		if (in_cliprect(x, y))
 		{
 			int c0 = backBuffer[y][x];
 			int c1 = color;
@@ -87,8 +95,8 @@ class GraphicsBGR233: public Graphics<uint8_t>
 
 	virtual void clear(Color color = 0)
 	{
-		for (int y = 0; y < this->yres; y++)
-			for (int x = 0; x < this->xres; x++)
+		for (int y = clip_rect.y; y < clip_rect.y + clip_rect.h; y++)
+			for (int x = clip_rect.x; x < clip_rect.x + clip_rect.w; x++)
 				backBuffer[y][x] = color;
 	}
 

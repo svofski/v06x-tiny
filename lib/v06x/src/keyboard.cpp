@@ -214,7 +214,7 @@ void scan_matrix()
 // 0 │DN  RT  UP  LT  ЗАБ ВК  ПС  TAB
 
 /* scancode, column|bit, char  */
-static int keymap_tab[] = {
+static const int keymap_tab[] = {
         SCANCODE_RUSLAT,        0x880,  0,      // rus/lat
         SCANCODE_US,            0x840,  0,      // ctrl
         SCANCODE_SS,            0x820,  0,      // shift

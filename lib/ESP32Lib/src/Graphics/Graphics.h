@@ -9,6 +9,9 @@
 		https://github.com/bitluni
 		http://bitluni.net
 */
+
+/* Modifications by: svofski 2023 ~ cheers bitluni!
+ */
 #pragma once
 #include <stdlib.h>
 #include <math.h>
@@ -16,6 +19,11 @@
 #include "ImageDrawer.h"
 
 #include "esp_heap_caps.h"
+
+
+struct Rect {
+    int x, y, w, h;
+};
 
 template<typename Color>
 class Graphics: public ImageDrawer
@@ -34,12 +42,18 @@ class Graphics: public ImageDrawer
 	int xres;
 	int yres;
 
+	Rect clip_rect;
+
 	virtual void dotFast(int x, int y, Color color) = 0;
 	virtual void dot(int x, int y, Color color) = 0;
 	virtual void dotAdd(int x, int y, Color color) = 0;
 	virtual void dotMix(int x, int y, Color color) = 0;
 	virtual Color get(int x, int y) = 0;
 	virtual Color** allocateFrameBuffer() = 0;
+
+	void clip_reset() {
+		clip_rect = {0, 0, xres, yres};
+	}
 
 	virtual Color** allocateFrameBuffer(int xres, int yres, Color value)
 	{
@@ -122,6 +136,7 @@ class Graphics: public ImageDrawer
 	{
 		this->xres = xres;
 		this->yres = yres;
+		clip_reset();
 		allocateFrameBuffers();
 	}
 
@@ -339,8 +354,8 @@ class Graphics: public ImageDrawer
 
 	virtual void clear(Color color = 0)
 	{
-		for (int y = 0; y < yres; y++)
-			for (int x = 0; x < xres; x++)
+		for (int y = clip_rect.y; y < clip_rect.h; y++)
+			for (int x = clip_rect.x; x < clip_rect.w; x++)
 				dotFast(x, y, color);
 	}
 
@@ -500,20 +515,20 @@ class Graphics: public ImageDrawer
 
 	void fillRect(int x, int y, int w, int h, Color color)
 	{
-		if (x < 0)
+		if (x < clip_rect.x)
 		{
 			w += x;
-			x = 0;
+			x = clip_rect.x;
 		}
-		if (y < 0)
+		if (y < clip_rect.y)
 		{
 			h += y;
-			y = 0;
+			y = clip_rect.y;
 		}
-		if (x + w > xres)
-			w = xres - x;
-		if (y + h > yres)
-			h = yres - y;
+		if (x + w > clip_rect.x + clip_rect.w)
+			w = clip_rect.x + clip_rect.w - x;
+		if (y + h > clip_rect.y + clip_rect.h)
+			h = clip_rect.y + clip_rect.h - y;
 		for (int j = y; j < y + h; j++)
 			for (int i = x; i < x + w; i++)
 				dotFast(i, j, color);

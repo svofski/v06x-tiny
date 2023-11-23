@@ -39,6 +39,7 @@ volatile int filling = 0;
 
 volatile uint32_t frame_no = 0;
 
+bool osd_showing = false;
 
 extern "C"
 void app_main(void)
@@ -60,7 +61,6 @@ void app_main(void)
     osd.x = 532;
     osd.y = 0;
     osd.test(); // draw a circle
-    bool osd_showing = false;
 
     // init scaler task on core 1 to pin scaler to core 1
     scaler::create_pinned_to_core();
@@ -70,7 +70,6 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(500));
 
     audio::create_pinned_to_core();
-
 
     // initialize spi bus before keyboard and sdcard
     SPIBus spi_bus{};
@@ -97,8 +96,7 @@ void app_main(void)
 
     //vTaskDelay(pdMS_TO_TICKS(200));
     SDCard sdcard{};
-    sdcard.mount();
-    sdcard.test();
+    sdcard.create_pinned_to_core();
 
     ESP_LOGI(TAG, "After all allocations: remaining DRAM: %u\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     ESP_LOGI(TAG, "After all allocations: remaining PSRAM: %u\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));

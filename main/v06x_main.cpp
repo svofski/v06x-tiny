@@ -183,12 +183,12 @@ void v06x_task(void *param)
         //{&ROM(incurzion)[0], ROMLEN(incurzion), 0},
         //{&ROM(bas299)[0], ROMLEN(bas299), 0 * 60 * 50},
         //{&ROM(baskor)[0], ROMLEN(baskor), 0 * 15 * 50},
+        {&ROM(bazis)[0], ROMLEN(bazis), 0 * 60 * 50},
         {&ROM(mineswep)[0], ROMLEN(mineswep), 30 * 50},
         {&ROM(text80)[0], ROMLEN(text80), 60 * 50},
         {&ROM(cybermut)[0], ROMLEN(cybermut), 60 * 50},
         {&ROM(hwdit512)[0], ROMLEN(hwdit512), 15 * 50},
-        {&ROM(bazis)[0], ROMLEN(bazis), 60 * 50},
-        {&ROM(dizrek_)[0], ROMLEN(dizrek_), 60 * 50}, // needs at least 600s to finish, slowdown and flickering near the end
+        //{&ROM(dizrek_)[0], ROMLEN(dizrek_), 60 * 50}, // needs at least 600s to finish, slowdown and flickering near the end
         {&ROM(hscroll)[0], ROMLEN(hscroll), 10 * 50},
         {&ROM(hiblue7c)[0], ROMLEN(hiblue7c), 15 * 50},
         {&ROM(clrspace)[0], ROMLEN(clrspace), 4 * 50},

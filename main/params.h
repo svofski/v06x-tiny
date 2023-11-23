@@ -1,8 +1,10 @@
 #pragma once
 
-#define SCALER_CORE 1
-#define EMU_CORE 0
-#define AUDIO_CORE 0            // ideally should be a core separate from the emulator, but there's some sync problem
+#define SCALER_CORE     1
+#define EMU_CORE        0
+#define AUDIO_CORE      0            // ideally should be a core separate from the emulator, but there's some sync problem
+#define SDCARD_CORE     0
+
 #define AUDIO_NBUFFERS 4
 
 #define VI53_HIGH_FREQ_MUTE 1   // mute frequencies that are too high for our samplerate
@@ -65,6 +67,8 @@
 #define BUFCOLUMNS 532
 
 #define LCD_NUM_FB 0
+
+#define SDCARD_FREQ_KHZ         12000 // 8MHz sdcard spi
 
 extern const char * TAG;
 
