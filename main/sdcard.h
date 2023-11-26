@@ -85,16 +85,42 @@ struct AssetStorage
         if (--ik < 0) {
             ik = (int)AK_LAST;
         }
-        return (AssetKind)k;
+        return (AssetKind)ik;
     }
 
     static AssetKind next(AssetKind k)
     {
         int ik = (int)k;
-        if (--ik > AK_LAST) {
+        if (++ik > AK_LAST) {
             ik = 0;
         }
-        return (AssetKind)k;
+        return (AssetKind)ik;
+    }
+
+    static const char* asset_cstr(AssetKind k)
+    {
+        const char* s = "???";
+        switch (k) {
+            case AK_ROM:
+                s = "ROM";
+                break;
+            case AK_WAV:
+                s = "WAV";
+                break;
+            case AK_FDD:
+                s = "FDD";
+                break;
+            case AK_EDD:
+                s = "EDD";
+                break;
+            case AK_BAS:
+                s = "BAS";
+                break;
+            default:
+                break;
+        }
+
+        return s;
     }
 };
 
@@ -108,7 +134,6 @@ struct SDRequest
     uint32_t param1;
     uint32_t param2;
 };
-
 
 class SDCard 
 {

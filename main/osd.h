@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <array>
+#include <algorithm>
 
 #include "compat.h"
 #include "Graphics/Font.h"
@@ -15,6 +16,22 @@
 #include "sdcard.h"
 
 typedef GraphicsBGR233 G;
+
+struct Colormap {
+    static constexpr G::Color osd_bg = 0122;// cold grey
+    static constexpr G::Color dir_bg = 0111;//0212;
+    static constexpr G::Color dir_text = 0377;
+    static constexpr G::Color dir_text_selected = 0;
+    static constexpr G::Color dir_bg_selected = 0350;
+
+    static constexpr G::Color index_bg = 0027;
+    static constexpr G::Color index_fg = 0377;
+
+    static constexpr G::Color asset_fg = 0377;
+    static constexpr G::Color asset_bg = osd_bg;
+    static constexpr G::Color asset_fg_selected = 0067;
+    static constexpr G::Color asset_bg_selected = dir_bg;
+};
 
 template<int ncolumns>
 class ListView
@@ -121,13 +138,6 @@ public:
     }
 };
 
-struct Colormap {
-    static constexpr G::Color dir_bg = 0212;
-    static constexpr G::Color dir_text = 0377;
-    static constexpr G::Color dir_text_selected = 0;
-    static constexpr G::Color dir_bg_selected = 0372;
-};
-
 // file select view: ROM/FDD/WAV/EDD/BAS tabs
 // file list view
 class OSD
@@ -138,6 +148,7 @@ private:
 public:
     typedef GraphicsBGR233::Color Color;
 
+    G::Color bgcolor;
     SDCard& sdcard;
 
     int x, y;
@@ -146,15 +157,20 @@ public:
     typedef ListView<3> dirview_t;
     dirview_t filebox;
 
+    typedef ListView<AK_LAST+1> assview_t;
+    assview_t assbox;
+
     int key_direction;
     int key_hold;
     int key_acceleration;
 
     AssetKind asset_kind;
+    std::array<int, AK_LAST+1> asset_selected;  // current selection for each asset kind
 
     OSD(SDCard& sdcard): sdcard(sdcard),x(0), y(0), width(0), height(0)
     {
         asset_kind = AK_ROM;
+        bgcolor = Colormap::osd_bg;
 
         gfx.setFrameBufferCount(1);
     }
@@ -168,19 +184,36 @@ public:
         gfx.autoScroll = false;
 
         int cw = gfx.font->charWidth;
-        filebox.set_column_widths({cw * 22, cw * 6, cw * 2});
-        filebox.row_height = gfx.font->charHeight;
+        filebox.set_column_widths({cw * 22 + 4, cw * 6 + 2, cw * 2});
+
+        int width = 0;
+        for (int i = 0; i < filebox.column_widths.size(); ++i) 
+            width += filebox.column_widths[i];
+
+        filebox.row_height = gfx.font->charHeight + 2;
         filebox.bounds = {
             .x = 4,
             .y = 16,
-            .w= gfx.font->charWidth * 30,
-            .h =gfx.font->charHeight * 25
+            .w = width,
+            .h = gfx.font->charHeight * 25
         };
-        filebox.on_draw_cell = std::bind(&OSD::draw_cell, this, 
+        filebox.on_draw_cell = std::bind(&OSD::draw_file_cell, this, 
             std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+
+        assbox.row_height = gfx.font->charHeight + 2;
+        assbox.bounds = {
+            .x = filebox.bounds.x,
+            .y = filebox.bounds.y - assbox.row_height,
+            .w = filebox.bounds.w,
+            .h = assbox.row_height
+        };
+        assbox.on_draw_cell = std::bind(&OSD::draw_asset_cell, this,
+            std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4);
+        assbox.set_column_widths({cw * 4, cw * 4, cw * 4, cw * 4, cw * 4});
 
         asset_kind = AK_ROM;
         filebox.rows_count = sdcard.get_file_count(asset_kind);
+        asset_selected = {};
 
         keyboard::onkeyevent = std::bind(&OSD::keyevent, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 
@@ -189,38 +222,67 @@ public:
         key_hold = 0;
     }
 
-    void draw_cell(G& gfx, const Rect& r, int row, int col)
+    void draw_file_cell(G& gfx, const Rect& r, int row, int col)
     {
+        const int char_width = gfx.font->charWidth;
+        const int char_height = gfx.font->charHeight;
+
         gfx.setTextColor(Colormap::dir_text, Colormap::dir_bg);
         if (row == filebox.selected) {
             gfx.setTextColor(Colormap::dir_text_selected, Colormap::dir_bg_selected);
         }
-        gfx.fillRect(r.x, r.y, r.w, r.h, gfx.backColor);
+
+
+        int vgap = (r.h - char_height) / 2;
+        gfx.setCursor(r.x, r.y + vgap);
 
         const FileInfo * fi = sdcard.get_file_info(asset_kind, row);
         if (fi == nullptr) {
+            gfx.fillRect(r.x, r.y, r.w, r.h, Colormap::dir_bg);
+
+            if (row == filebox.first_visible_row(true) && col == 0) {
+                gfx.setTextColor(Colormap::dir_text, Colormap::dir_bg);
+                gfx.print("No files");
+            }
             return;
         }
 
-        gfx.setCursor(r.x, r.y);
         switch (col) {
         case 0:
-            gfx.print(fi->name);
+            {
+                int lpadding = 2;
+                int textw = std::clamp((int)fi->name.length() * char_width, 0, r.w);
+                gfx.setCursor(r.x + lpadding, r.y + vgap);
+                gfx.print(fi->name);
+
+                // padding
+                gfx.fillRect(r.x, r.y, r.w, vgap, gfx.backColor);
+                gfx.fillRect(r.x, r.y + vgap + char_height, r.w, vgap, gfx.backColor);
+                gfx.fillRect(r.x, r.y, lpadding, r.h, gfx.backColor);
+                if (textw + lpadding < r.w) {
+                    gfx.fillRect(r.x + textw + lpadding, r.y, r.w - textw - lpadding, r.h, gfx.backColor);
+                }
+            }
             break;
         case 1:
             {
-                int w = filebox.column_widths[col] / 8;
+                int width_px = filebox.column_widths[col];
+                int w = width_px / 8;
                 const std::string sstr = fi->size_string();
-                //printf("w=%d sstr=%s len=%d spaces=%d\n", w, sstr.c_str(), sstr.length(), w - sstr.length());
                 for (int i = 0; i < w - sstr.length(); ++i)
                     gfx.print(' ');
                 gfx.print(fi->size_string());
+
+                // vert gap
+                gfx.fillRect(r.x, r.y, r.w, vgap, gfx.backColor);
+                gfx.fillRect(r.x, r.y + vgap + char_height, r.w, vgap, gfx.backColor);
+                gfx.fillRect(gfx.cursorX, r.y, r.w - (gfx.cursorX - r.x), r.h, gfx.backColor);
             }
             break;
         case 2:
             {
+                bool paint = false;
                 if (fi->name.size() > 0) {
-                    bool paint = false;
                     char initial = fi->initial();
                     if (row == filebox.first_visible_row(true))
                         paint = true;
@@ -231,12 +293,52 @@ public:
                         }
                     }
                     if (paint) {
-                        gfx.setCursor(r.x + 4, r.y);
+                        gfx.fillRect(r.x, r.y, r.w, r.h, Colormap::index_bg);
+                        gfx.setTextColor(Colormap::index_fg, Colormap::index_bg);
+                        gfx.setCursor(r.x + 4, r.y + vgap);
                         gfx.print(initial);
                     }
                 }
+
+                if (!paint) {
+                    gfx.fillRect(r.x, r.y, r.w, r.h, bgcolor);
+                }
             }
             break;
+        }
+    }
+
+    void draw_asset_cell(G& gfx, const Rect& r, int row, int col)
+    {
+        gfx.setTextColor(Colormap::asset_fg, Colormap::asset_bg);
+        if ((int)asset_kind == col) {
+            // selected
+            gfx.setTextColor(Colormap::asset_fg_selected, Colormap::asset_bg_selected);
+        }
+
+        int vpadding = (r.h - gfx.font->charHeight) / 2;
+        int text_w = 3 * gfx.font->charWidth;
+        int hpadding = (r.w - text_w) / 2;
+
+        gfx.setCursor(r.x + hpadding, r.y + vpadding);
+
+        gfx.print(AssetStorage::asset_cstr((AssetKind)col));
+        gfx.fillRect(r.x, r.y, r.w, vpadding, gfx.backColor);
+        gfx.fillRect(r.x, r.y + gfx.font->charHeight + vpadding, r.w, vpadding, gfx.backColor);
+        gfx.fillRect(r.x, r.y, hpadding, r.h, gfx.backColor);
+        gfx.fillRect(r.x + hpadding + text_w, r.y, hpadding, r.h, gfx.backColor);
+    }
+
+    void set_asset_kind(AssetKind value)
+    {
+        if (value != asset_kind) {
+            asset_selected[asset_kind] = filebox.selected;
+            asset_kind = value;
+            filebox.set_rows_count(sdcard.get_file_count(asset_kind));
+            filebox.set_selected(std::clamp(asset_selected[asset_kind], 0, filebox.rows_count - 1));
+            filebox.ensure_visible(filebox.selected);
+            filebox.invalidate();
+            assbox.invalidate();
         }
     }
 
@@ -254,13 +356,20 @@ public:
                     key_acceleration = 0;
                     break;
                 case SCANCODE_LEFT:
-                    asset_kind = AssetStorage::prev(asset_kind);
-                    filebox.invalidate();
+                    set_asset_kind(AssetStorage::prev(asset_kind));
                     break;
+                case SCANCODE_TAB:
                 case SCANCODE_RIGHT:
-                    asset_kind = AssetStorage::next(asset_kind);
-                    filebox.invalidate();
+                    set_asset_kind(AssetStorage::next(asset_kind));
                     break;
+                //case SCANCODE_TAB:
+                //    bgcolor = (unsigned)((bgcolor - 1)) & 255;
+                //    test();
+                //    break;
+                //case SCANCODE_PS:
+                //    bgcolor = (unsigned)((bgcolor + 1)) & 255;
+                //    test();
+                //    break;
             }
         }
         else {
@@ -278,15 +387,9 @@ public:
 
     void test()
     {
-        Color text = 0377;
-        Color black = 0;
-
-        gfx.fillRect(0, 0, gfx.xres, gfx.yres, 0100);
-        //gfx.fillCircle(0, 0, gfx.xres/2, fg);
-        gfx.setTextColor(text, black);
-
+        gfx.fillRect(0, 0, gfx.xres, gfx.yres, bgcolor);
         filebox.invalidate();
-        
+        assbox.invalidate();
         gfx.show();
     }
 
@@ -306,6 +409,10 @@ public:
         gfx.print("M:");
         gfx.print(keyboard::state.pc, 16, 2);
 
+        gfx.setCursor(0, 28 * gfx.font->charHeight);
+        gfx.print("bgcolor: ");
+        gfx.print((unsigned char)bgcolor, 8, 3);
+
         //filebox.scroll_start++;
         //filebox.invalidate();
 
@@ -321,6 +428,9 @@ public:
 
         if (filebox.invalid) {
             filebox.paint(gfx);
+        }
+        if (assbox.invalid) {
+            assbox.paint(gfx);
         }
 
         gfx.show();
