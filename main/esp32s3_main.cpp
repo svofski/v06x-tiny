@@ -40,6 +40,10 @@ volatile int filling = 0;
 volatile uint32_t frame_no = 0;
 
 bool osd_showing = false;
+bool sdcard_busy = false;
+
+SDCard sdcard{};
+OSD osd(sdcard);
 
 extern "C"
 void app_main(void)
@@ -56,11 +60,6 @@ void app_main(void)
     scaler::allocate_buffers();
     audio::allocate_buffers();
 
-    OSD osd;
-    osd.init(256, 240); // scandoubled osd
-    osd.x = 532;
-    osd.y = 0;
-    osd.test(); // draw a circle
 
     // init scaler task on core 1 to pin scaler to core 1
     scaler::create_pinned_to_core();
@@ -77,12 +76,30 @@ void app_main(void)
     // SPI keyboard
     keyboard::init();
 
+    // let the keyboard finish SPI transaction if we were reset
+    keyboard::read_rows();
+
+    // this will also scan the directories for all usable assets
+    printf("Delay before mounting SD card\n");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    sdcard.create_pinned_to_core();
+
     v06x::init(scaler_to_emu, scaler::bounce_buf8[0], scaler::bounce_buf8[1]);
     v06x::create_pinned_to_core();
 
+
+    //// this will also scan the directories for all usable assets
+    //sdcard.create_pinned_to_core();
+
+    osd.init(256, 240); // scandoubled osd
+    osd.x = 532;
+    osd.y = 0;
+    osd.test(); // draw a circle
+
     // show/hide OSD when US+RUS is pressed for 1s
-    esp_filler::onosd = [&osd, &osd_showing]() {
+    esp_filler::onosd = [&osd]() {
         if (!osd_showing) {
+            osd.showing();
             scaler::show_osd(&osd);
         }
         else {
@@ -90,27 +107,18 @@ void app_main(void)
         }
         osd_showing = !osd_showing;
         keyboard::osd_takeover(osd_showing);
-        printf("OSD takeover=%d\n", osd_showing);
     };
-
-
-    // let the keyboard finish SPI transaction if we were reset
-    keyboard::read_rows();
-
-    //vTaskDelay(pdMS_TO_TICKS(200));
-    SDCard sdcard{};
-    sdcard.create_pinned_to_core();
 
     ESP_LOGI(TAG, "After all allocations: remaining DRAM: %u\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
     ESP_LOGI(TAG, "After all allocations: remaining PSRAM: %u\n", heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-    
+
     int last_frame_cycles = 0;
     while (1) {        
         xSemaphoreGive(sem_gui_ready);
         xSemaphoreTake(sem_vsync_end, portMAX_DELAY);
         ++frame_no;
         if (osd_showing) {
-            osd.frame();
+            osd.frame(frame_no);
         }
 
         if (frame_no % 50 == 0) {

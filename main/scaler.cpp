@@ -24,7 +24,15 @@
 #include "esp_filler.h"
 #include "osd.h"
 
-#define C8TO16(c)   (((((c) & 7) * 4) << 11) | (((((c) >> 3) & 7) * 8) << 5) | ((((c) >> 6) & 3) * 8))
+#define _C8TO16(c)   (((((c) & 7) * 4) << 11) | (((((c) >> 3) & 7) * 8) << 5) | ((((c) >> 6) & 3) * 8))
+
+extern bool sdcard_busy;
+
+IRAM_ATTR
+static inline uint16_t C8TO16(uint8_t c) 
+{
+    return _C8TO16(c);
+}
 
 #define DITHER_FRAMES 1
 
@@ -45,6 +53,8 @@ uint8_t * bounce_buf8[2];
 
 //uint16_t** osd_buf16;
 OSD * osd;
+OSD * set_osd = nullptr;
+bool  set_osd_pls = false;
 
 volatile int framecount = 0;
 volatile uint64_t lastframe_us = 0;
@@ -457,9 +467,9 @@ copy_osd(uint16_t * bounce16, int lcd_y)
     int osdy_last = osd->y + (osd->height << 1);
     int osd_w = osd->width;
 
-    for (int i = 0; i < BOUNCE_NLINES; ++i)
+    for (int i = 0; i < BOUNCE_NLINES; i += 2) // fill 10 lines, doubling
     {
-        if ((i & 1) == 0 && lcd_y + i >= osdy_first && lcd_y + i < osdy_last)
+        if (lcd_y + i >= osdy_first && lcd_y + i < osdy_last)
         {
             // convert 8-bit bgr233 osd buffer to double-scanned native 16-bit rgb565
             uint16_t *dst = bounce16 + i * LCD_H_RES + osdx;
@@ -486,6 +496,7 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
     BaseType_t high_task_awoken = pdFALSE;
     xQueueSendFromISR(scaler_to_emu, &pos_px, &high_task_awoken);
 
+#if TUTU
     if (pos_px == 0) {
         read_buffer_index = 0;
         if (tutu_i == -1) tutu_i = 0;
@@ -499,7 +510,7 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
             ++tutu_i;
     }
     tutu_frm++;
-
+#endif
     uint8_t * buf8 = bounce_buf8[read_buffer_index];
     uint16_t * bounce16 = (uint16_t *)bounce_buf;
 
@@ -552,7 +563,9 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
 
         // copy osd buffer with 2x vert scale
         int lcd_y = pos_px / LCD_H_RES;
-        copy_osd(bounce16, lcd_y);
+        assert(lcd_y <= 480-10);
+        if (!sdcard_busy)
+            copy_osd(bounce16, lcd_y);
     }
 
     // flip buffers for the next time
@@ -656,6 +669,11 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
     frameduration_us = esp_timer_get_time() - lastframe_us;
     lastframe_us = esp_timer_get_time();
 
+    if (set_osd_pls) {
+        set_osd_pls = false;
+        osd = set_osd;
+    }
+
     BaseType_t high_task_awoken = pdFALSE;
     if (xSemaphoreTakeFromISR(sem_gui_ready, &high_task_awoken) == pdTRUE) {
         xSemaphoreGiveFromISR(sem_vsync_end, &high_task_awoken);
@@ -666,7 +684,9 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
 
 void show_osd(OSD * _osd)
 {
-    osd = _osd;
+    //osd = _osd;
+    set_osd = _osd;
+    set_osd_pls = true;
 }
 
 }

@@ -122,6 +122,8 @@ extern keyboard_state_t io_state;
 
 extern matrix_t rows;
 
+extern std::function<void(int,int,bool)> onkeyevent; // scancode, char code, 1 = make, 0 = break
+
 void io_select_columns(uint8_t pa);
 void io_read_rows();
 void io_read_modkeys();

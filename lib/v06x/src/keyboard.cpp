@@ -28,6 +28,8 @@ static spi_device_handle_t spimatrix;
 
 static spi_transaction_t transaction;
 
+std::function<void(int,int,bool)> onkeyevent; // scancode, char code, 1 = make, 0 = break
+
 // spi bus must be initialised!
 void init()
 {
@@ -313,6 +315,9 @@ void detect_changes()
                 int charcode = keymap_tab[map_index + 2];
 
                 //printf("%2d %3d '%c' %s\n", scancode, charcode, charcode > 31 ? charcode : 0, make ? "make" : "break");
+                if (onkeyevent) {
+                    onkeyevent(scancode, charcode, make);
+                }
             }
         }
     }

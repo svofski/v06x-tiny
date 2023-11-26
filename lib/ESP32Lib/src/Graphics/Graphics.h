@@ -13,8 +13,9 @@
 /* Modifications by: svofski 2023 ~ cheers bitluni!
  */
 #pragma once
-#include <stdlib.h>
-#include <math.h>
+#include <string>
+#include <cstdlib>
+#include <cmath>
 #include "Font.h"
 #include "ImageDrawer.h"
 
@@ -61,11 +62,12 @@ class Graphics: public ImageDrawer
 		Color** frame = (Color **)heap_caps_malloc(yres * sizeof(Color *), MALLOC_CAP_INTERNAL);
 		if(!frame)
 			ERROR("Not enough memory for frame buffer");				
+		Color * blockframe = (Color *)heap_caps_malloc(xres * yres * sizeof(Color), MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT);
+		if (!blockframe)
+			ERROR("Not enough memory for frame buffer");
 		for (int y = 0; y < yres; y++)
 		{
-			frame[y] = (Color *)heap_caps_malloc(xres * sizeof(Color), MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT); 
-			if(!frame[y])
-				ERROR("Not enough memory for frame buffer");
+			frame[y] = &blockframe[y * xres];
 			for (int x = 0; x < xres; x++)
 				frame[y][x] = value;
 		}
@@ -169,12 +171,17 @@ class Graphics: public ImageDrawer
 		if (!font->valid(ch))
 			return;
 		const unsigned char *pix = &font->pixels[font->charWidth * font->charHeight * (ch - font->firstChar)];
+		Color c1 = frontColor, c0 = backColor;
 		for (int py = 0; py < font->charHeight; py++)
 			for (int px = 0; px < font->charWidth; px++)
-				if (*(pix++))
-					dotMix(px + x, py + y, frontColor);
-				else
-					dotMix(px + x, py + y, backColor);
+			{
+				Color c = *pix++ ? c1 : c0;
+				dotMix(px + x, py + y, c);
+			}
+			//	if (*(pix++))
+			//		dotMix(px + x, py + y, frontColor);
+			//	else
+			//		dotMix(px + x, py + y, backColor);
 	}
 
 	void print(const char ch)
@@ -199,6 +206,11 @@ class Graphics: public ImageDrawer
 	{
 		print(ch);
 		print("\n");
+	}
+
+	void print(const std::string & str) 
+	{
+		print(str.c_str());
 	}
 
 	void print(const char *str)
@@ -532,6 +544,7 @@ class Graphics: public ImageDrawer
 		for (int j = y; j < y + h; j++)
 			for (int i = x; i < x + w; i++)
 				dotFast(i, j, color);
+				//dotFast(i, j, font->pixels[i - x + (j - y) * 64]*color);
 	}
 
 	void rect(int x, int y, int w, int h, Color color)

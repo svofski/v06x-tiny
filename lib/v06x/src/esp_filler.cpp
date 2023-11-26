@@ -27,6 +27,8 @@ audio_sample_t * audio_buf;
 
 #define TIMED_COMMIT
 
+extern bool osd_showing;
+
 namespace esp_filler 
 {
 
@@ -387,7 +389,6 @@ int bob(int maxframes)
         line6 = 6;
         frame_rpixels = rpixels;
         ay_bufpos = 0;
-
         //printf("frame %d\n", frm);
         // frame counted in 16-pixel chunks
         // 768/16 = 48, 0x30 -> next line when i & 0x3f == 0x30
@@ -613,7 +614,6 @@ rowend:
             last_rpixels = rpixels;
             *audio_buf++ = vi53->out_sum() << 10;   // sample audio
         }
-
         keyboard::io_commit_ruslat();
         keyboard::io_read_modkeys(); 
 
@@ -647,11 +647,6 @@ rowend:
 
     return maxframes;
 }
-
-//uint16_t * palette8()
-//{
-//    return py2;
-//}
 
 }
 

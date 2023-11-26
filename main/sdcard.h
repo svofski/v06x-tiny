@@ -12,13 +12,17 @@
 #include "driver/sdspi_host.h"
 #include "dirent.h"
 #include "unistd.h"
-//#include "sys/stat.h"
-//#include "sys/types.h"
 
+#include "util.h"
 #include "params.h"
+
+#include "better_readdir.h"
+#include "psram_allocator.h"
 
 #define MOUNT_POINT_SD "/sdcard"
 #define V06C_DIR "/vector06"
+
+extern bool sdcard_busy;
 
 struct FileInfo 
 {
@@ -28,11 +32,16 @@ struct FileInfo
 
     std::string size_string() const {
         if (size < 9999) {
-            return ::to_string(size);
+            return std::to_string(size);
         }
         else {
-            return ::to_string(size/1024) + "K";
+            return std::to_string(size/1024) + "K";
         }
+    }
+
+    char initial() const
+    {
+        return name.length() ? toupper(name.at(0)) : 0;
     }
 };
 
@@ -43,23 +52,16 @@ enum AssetKind
     AK_WAV,
     AK_FDD,
     AK_EDD,
-    AK_BAS
+    AK_BAS,
+    AK_LAST = AK_BAS
 };
-
-std::string str_tolower(std::string s)
-{
-    std::transform(s.begin(), s.end(), s.begin(), 
-                   [](unsigned char c){ return std::tolower(c); } // correct
-                  );
-    return s;
-}
 
 struct AssetStorage
 {
-    std::array<std::vector<FileInfo>,AK_BAS-AK_ROM+1> files;
+    std::array<std::vector<FileInfo, PSRAMAllocator<FileInfo>>,AK_BAS-AK_ROM+1> files;
 
     static AssetKind guess_kind(std::string path) {
-        std::string ext = str_tolower(std::filesystem::path(path).extension());
+        std::string ext = util::str_tolower_copy(std::filesystem::path(path).extension());
         
         if (ext == ".rom" || ext == ".r0m" || ext == ".vec") return AK_ROM;
         if (ext == ".wav") return AK_WAV;
@@ -69,18 +71,59 @@ struct AssetStorage
 
         return AK_UNKNOWN;
     }
+
+    void clear()
+    {
+        for (auto n = 0; n < files.size(); ++n) {
+            files[n].clear();
+        }
+    }
+
+    static AssetKind prev(AssetKind k)
+    {
+        int ik = (int)k;
+        if (--ik < 0) {
+            ik = (int)AK_LAST;
+        }
+        return (AssetKind)k;
+    }
+
+    static AssetKind next(AssetKind k)
+    {
+        int ik = (int)k;
+        if (--ik > AK_LAST) {
+            ik = 0;
+        }
+        return (AssetKind)k;
+    }
 };
+
+enum {
+    SD_GET_FILESIZE,
+};
+
+struct SDRequest
+{
+    uint8_t request;
+    uint32_t param1;
+    uint32_t param2;
+};
+
 
 class SDCard 
 {
 private:
     sdmmc_card_t * card;
-
     AssetStorage storage;
+    QueueHandle_t request_queue;
 
 public:
+    QueueHandle_t osd_notify_queue;
+
     SDCard() : card(nullptr)
     {
+        request_queue = xQueueCreate(64, sizeof(SDRequest));
+        osd_notify_queue = xQueueCreate(64, sizeof(int));
     }
 
     bool mount()
@@ -92,6 +135,7 @@ public:
             .allocation_unit_size = 16 * 1024};
 
         sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+        host.flags |= SDMMC_HOST_FLAG_1BIT;
         host.max_freq_khz = SDCARD_FREQ_KHZ;
 
         sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
@@ -105,6 +149,11 @@ public:
         return ret == ESP_OK;
     }
 
+    void unmount()
+    {
+        esp_vfs_fat_sdcard_unmount(MOUNT_POINT_SD, card);
+    }
+
     ssize_t get_filesize(const std::string& path)
     {
         struct stat st;
@@ -112,13 +161,16 @@ public:
             if (stat(path.c_str(), &st) == 0) {
                 return st.st_size;
             }
-            vTaskDelay(1);
+            vTaskDelay(10);
         }
+        printf("get_filesize(): gave up for %s\n", path.c_str());
         return -1;
     }
 
-    void test()
+    void rescan_storage()
     {
+        storage.clear();
+
         if (card == nullptr) {
             printf("%s: not mounted\n", __PRETTY_FUNCTION__);
             return;
@@ -141,7 +193,12 @@ public:
             }
 
             printf("Reading directory: %s\n", dirpath.c_str());
+            #if USE_BETTER_READDIR
+            FILINFO filinfo{};
+            dirent *dent = better_vfs_fat_readdir(NULL, dir, &filinfo);
+            #else
             dirent *dent = readdir(dir);
+            #endif
             for (; dent != nullptr;) {
                 if (dent->d_type == DT_REG) {
                     std::string name{dent->d_name};
@@ -151,22 +208,44 @@ public:
                         FileInfo fi{
                             .name = name,
                             .fullpath = path,
-                            .size = -1 //get_filesize(path)
+                            #if USE_BETTER_READDIR
+                            .size = static_cast<ssize_t>(filinfo.fsize)
+                            #else
+                            .size = get_filesize(path)
+                            #endif 
                         };
 
                         storage.files[kind].emplace_back(fi);
-                        printf("%s %s %s\n", fi.fullpath.c_str(), fi.name.c_str(), fi.size_string().c_str());
+                        //printf("%s %s %s\n", fi.fullpath.c_str(), fi.name.c_str(), fi.size_string().c_str());
                     }
                 }
                 else if (dent->d_type == DT_DIR) {
                     std::string subdir = dirpath + "/" + std::string{dent->d_name};
                     dirs.push_back(subdir); // push into dirs to read later
                 }
+                #if USE_BETTER_READDIR
+                dent = better_vfs_fat_readdir(NULL, dir, &filinfo);
+                #else
                 dent = readdir(dir);
+                #endif
             }
             closedir(dir);
         }
-        printf("read_dirs done\n");
+
+        for (auto kind = 0; kind < storage.files.size(); ++kind) {
+            std::sort(storage.files[kind].begin(), storage.files[kind].end(), 
+                [](const FileInfo& a, const FileInfo& b) {
+                    return util::str_tolower_copy(a.name) < util::str_tolower_copy(b.name);
+                });
+        }
+
+        printf("rescan_storage: ROM: %d WAV: %d FDD: %d EDD: %d BAS: %d\n",
+            get_file_count(AK_ROM),
+            get_file_count(AK_WAV),
+            get_file_count(AK_FDD),
+            get_file_count(AK_EDD),
+            get_file_count(AK_BAS)
+            );
     }
 
     void create_pinned_to_core()
@@ -179,10 +258,55 @@ public:
         extern bool osd_showing;
 
         SDCard * self = reinterpret_cast<SDCard *>(_self);
-        keyboard::osd_takeover(true);
-        self->mount();
-        self->test();
-        keyboard::osd_takeover(osd_showing);
-        vTaskDelete(NULL);
+        while (!self->mount()) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+
+        self->rescan_storage();
+
+        while (true) {
+            SDRequest r;
+            xQueueReceive(self->request_queue, &r, portMAX_DELAY);
+            switch (r.request) {
+                case SD_GET_FILESIZE:
+                    FileInfo * fi = const_cast<FileInfo *>(self->get_file_info((AssetKind)r.param1, r.param2));
+                    if (fi != nullptr) {
+                        fi->size = self->get_filesize(fi->fullpath);
+                        if (fi->size == -1) {
+                            fi->size = -3;
+                        }
+                        int arg = 1;
+                        xQueueSend(self->osd_notify_queue, &arg, 0);
+                    }
+                    break;
+            }
+        }
+    }
+
+    void request_filesize(AssetKind kind, int index)
+    {
+        FileInfo *fi = const_cast<FileInfo *>(get_file_info(kind, index));
+        fi->size = -2; 
+        SDRequest r;
+        r.request = SD_GET_FILESIZE;
+        r.param1 = (int)kind;
+        r.param2 = index;
+        xQueueSend(request_queue, &r, portMAX_DELAY);
+    }
+
+    const FileInfo* get_file_info(AssetKind kind, int index)
+    {
+        if (kind != AK_UNKNOWN && index >= 0 && index < storage.files[kind].size()) {
+            FileInfo * info = &storage.files[kind][index];
+            return info;
+        }
+        return nullptr;
+    }
+
+    int get_file_count(AssetKind kind) const 
+    {
+        if (kind == AK_UNKNOWN)
+            return 0;
+        return storage.files[kind].size();
     }
 };

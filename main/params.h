@@ -1,5 +1,7 @@
 #pragma once
 
+#define USE_BETTER_READDIR 1
+
 #define SCALER_CORE     1
 #define EMU_CORE        0
 #define AUDIO_CORE      0            // ideally should be a core separate from the emulator, but there's some sync problem
@@ -74,7 +76,7 @@
 #define LCD_NUM_FB 0
 
 #define SDCARD_FREQ_KHZ         20000 // 8MHz sdcard spi
-#define SDCARD_NRETRIES         5
+#define SDCARD_NRETRIES         10
 extern const char * TAG;
 
 typedef int16_t audio_sample_t;

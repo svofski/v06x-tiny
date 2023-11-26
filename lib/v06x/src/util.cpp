@@ -191,6 +191,15 @@ void str_toupper(std::string & s)
     }
 }
 
+std::string str_tolower_copy(std::string s)
+{
+    std::transform(s.begin(), s.end(), s.begin(), 
+                   [](unsigned char c){ return std::tolower(c); } // correct
+                  );
+    return s;
+}
+
+
 int careful_rename(std::string const& from, std::string const& to)
 {
     int res = rename(from.c_str(), to.c_str());
