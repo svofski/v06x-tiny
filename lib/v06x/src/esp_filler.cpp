@@ -27,8 +27,6 @@ audio_sample_t * audio_buf;
 
 #define TIMED_COMMIT
 
-extern bool osd_showing;
-
 namespace esp_filler 
 {
 
@@ -618,8 +616,8 @@ rowend:
         keyboard::io_read_modkeys(); 
 
         if ((keyboard::state.pc & keyboard::PC_MODKEYS_MASK) == ((keyboard::PC_BIT_US | keyboard::PC_BIT_RUSLAT) ^ keyboard::PC_MODKEYS_MASK)) {
-            usrus_holdframes++;
-            if (usrus_holdframes == 50 && onosd) {
+            usrus_holdframes = usrus_holdframes + 1;
+            if (usrus_holdframes == OSD_USRUS_FRAMES_HOLD && onosd) {
                 onosd();
             }
         }
@@ -634,6 +632,13 @@ rowend:
         audio_buf = audio::audio_pp[audiobuf_index];
         AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
 
+        int cmd;
+        if (xQueueReceive(::emu_command_queue, &cmd, 0)) {
+            if (cmd == CMD_EMU_BREAK) {
+                break;
+            }
+        }
+
         if (keyboard::sbros_pressed()) {
             onreset(ResetMode::BLKSBR);
         }
@@ -641,7 +646,7 @@ rowend:
             onreset(ResetMode::BLKVVOD);
         }
 
-        v06x_framecount++;
+        v06x_framecount = v06x_framecount + 1;
         v06x_frame_cycles = ipixels;
     }
 

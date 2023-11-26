@@ -12,6 +12,8 @@
 #include "driver/sdspi_host.h"
 #include "dirent.h"
 #include "unistd.h"
+#include "sys/stat.h"
+#include "fcntl.h"
 
 #include "util.h"
 #include "params.h"
@@ -126,6 +128,7 @@ struct AssetStorage
 
 enum {
     SD_GET_FILESIZE,
+    SD_LOAD_FILE,
 };
 
 struct SDRequest
@@ -144,6 +147,7 @@ private:
 
 public:
     QueueHandle_t osd_notify_queue;
+    std::vector<uint8_t, PSRAMAllocator<uint8_t>> blob;
 
     SDCard() : card(nullptr)
     {
@@ -190,6 +194,25 @@ public:
         }
         printf("get_filesize(): gave up for %s\n", path.c_str());
         return -1;
+    }
+
+    ssize_t load_blob(const FileInfo * fi)
+    {
+        ssize_t result = -1;
+
+        printf("load_blob: %s size=%d\n", fi->fullpath.c_str(), fi->size);
+
+        blob.clear();
+        int fd = open(fi->fullpath.c_str(), O_RDONLY);
+        if (fd != -1) {
+            blob.resize(fi->size);
+            result = read(fd, blob.data(), blob.size());
+        }
+        close(fd);
+
+        printf("load_blob: done, %d bytes read\n", result);
+
+        return result;
     }
 
     void rescan_storage()
@@ -280,8 +303,6 @@ public:
 
     static void sdcard_task(void * _self)
     {
-        extern bool osd_showing;
-
         SDCard * self = reinterpret_cast<SDCard *>(_self);
         while (!self->mount()) {
             vTaskDelay(pdMS_TO_TICKS(1000));
@@ -294,14 +315,25 @@ public:
             xQueueReceive(self->request_queue, &r, portMAX_DELAY);
             switch (r.request) {
                 case SD_GET_FILESIZE:
-                    FileInfo * fi = const_cast<FileInfo *>(self->get_file_info((AssetKind)r.param1, r.param2));
-                    if (fi != nullptr) {
-                        fi->size = self->get_filesize(fi->fullpath);
-                        if (fi->size == -1) {
-                            fi->size = -3;
+                    {
+                        FileInfo * fi = const_cast<FileInfo *>(self->get_file_info((AssetKind)r.param1, r.param2));
+                        if (fi != nullptr) {
+                            fi->size = self->get_filesize(fi->fullpath);
+                            if (fi->size == -1) {
+                                fi->size = -3;
+                            }
+                            int arg = 1;
+                            xQueueSend(self->osd_notify_queue, &arg, 0);
                         }
-                        int arg = 1;
-                        xQueueSend(self->osd_notify_queue, &arg, 0);
+                    }
+                    break;
+                case SD_LOAD_FILE:
+                    {
+                        FileInfo * fi = const_cast<FileInfo *>(self->get_file_info((AssetKind)r.param1, r.param2));
+                        if (fi != nullptr) {
+                            int result = self->load_blob(fi);
+                            xQueueSend(self->osd_notify_queue, &result, 0);
+                        }
                     }
                     break;
             }
@@ -314,6 +346,19 @@ public:
         fi->size = -2; 
         SDRequest r;
         r.request = SD_GET_FILESIZE;
+        r.param1 = (int)kind;
+        r.param2 = index;
+        xQueueSend(request_queue, &r, portMAX_DELAY);
+    }
+
+    void load_asset(AssetKind kind, int index)
+    {
+        const FileInfo * fi = get_file_info(kind, index);
+        if (fi == nullptr) {
+            return;
+        }
+        SDRequest r;
+        r.request = SD_LOAD_FILE;
         r.param1 = (int)kind;
         r.param2 = index;
         xQueueSend(request_queue, &r, portMAX_DELAY);

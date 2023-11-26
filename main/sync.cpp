@@ -15,6 +15,7 @@ SemaphoreHandle_t sem_gui_ready;
 // scaler to emulator: request next 6 lines
 QueueHandle_t scaler_to_emu;
 QueueHandle_t audio_queue;
+QueueHandle_t emu_command_queue;
 
 namespace syncp {
 
@@ -27,6 +28,7 @@ void create_primitives()
     assert(sem_gui_ready);
     scaler_to_emu = xQueueCreate(2, sizeof(int));
     audio_queue = xQueueCreate(AUDIO_NBUFFERS, sizeof(int));
+    emu_command_queue = xQueueCreate(1, sizeof(int));
 }
 
 }

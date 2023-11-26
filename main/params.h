@@ -1,6 +1,9 @@
 #pragma once
 
+#define VERSION_STRING "0.1"
+
 #define USE_BETTER_READDIR 1
+#define OSD_USRUS_FRAMES_HOLD 25    // how many frames US+RUS is held before togglinig OSD
 
 #define SCALER_CORE     1
 #define EMU_CORE        0

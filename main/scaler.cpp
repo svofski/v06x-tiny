@@ -450,6 +450,7 @@ fillcolumn_h54_v106_dither_b(uint16_t * col, uint32_t * src)
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
 }
 
+#if DEBUG_BOUNCE_BUFFERS
 constexpr int NTUTU = 150;
 static int tutu_i = -1;
 static uint64_t tutu[NTUTU];
@@ -457,6 +458,7 @@ static int tutu_pos_px[NTUTU];
 static int tutu_len_bytes[NTUTU];
 static int tutu_frm = 0;
 static int tutu_frm_reg = 0;
+#endif
 
 static void IRAM_ATTR
 copy_osd(uint16_t * bounce16, int lcd_y)
@@ -496,7 +498,7 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
     BaseType_t high_task_awoken = pdFALSE;
     xQueueSendFromISR(scaler_to_emu, &pos_px, &high_task_awoken);
 
-#if TUTU
+#if DEBUG_BOUNCE_BUFFERS
     if (pos_px == 0) {
         read_buffer_index = 0;
         if (tutu_i == -1) tutu_i = 0;
@@ -678,7 +680,7 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
     if (xSemaphoreTakeFromISR(sem_gui_ready, &high_task_awoken) == pdTRUE) {
         xSemaphoreGiveFromISR(sem_vsync_end, &high_task_awoken);
     }
-    framecount++;
+    framecount = framecount + 1;
     return high_task_awoken == pdTRUE;
 }
 

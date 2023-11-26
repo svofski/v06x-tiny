@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <cstring>
 #include <cmath>
+#include <cstdint>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -39,7 +40,7 @@ volatile int filling = 0;
 
 volatile uint32_t frame_no = 0;
 
-bool osd_showing = false;
+//bool osd_showing = false;
 bool sdcard_busy = false;
 
 SDCard sdcard{};
@@ -91,22 +92,30 @@ void app_main(void)
     //// this will also scan the directories for all usable assets
     //sdcard.create_pinned_to_core();
 
-    osd.init(256, 240); // scandoubled osd
+    osd.init(268, 240); // scandoubled osd
     osd.x = 532;
     osd.y = 0;
-    osd.test(); // draw a circle
 
     // show/hide OSD when US+RUS is pressed for 1s
-    esp_filler::onosd = [&osd]() {
-        if (!osd_showing) {
-            osd.showing();
-            scaler::show_osd(&osd);
+    esp_filler::onosd = []() {
+        if (!osd.visible) {
+            osd.show();
         }
         else {
-            scaler::show_osd(nullptr);
+            osd.hide();
         }
-        osd_showing = !osd_showing;
-        keyboard::osd_takeover(osd_showing);
+    };
+
+    osd.onshown = []() {
+        scaler::show_osd(&osd);
+        keyboard::osd_takeover(true);
+    };
+    osd.onhidden = []() {
+        scaler::show_osd(nullptr);
+        keyboard::osd_takeover(false);
+    };
+    osd.onload = [](AssetKind k, int index) {
+        sdcard.load_asset(k, index);
     };
 
     ESP_LOGI(TAG, "After all allocations: remaining DRAM: %u\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
@@ -116,9 +125,16 @@ void app_main(void)
     while (1) {        
         xSemaphoreGive(sem_gui_ready);
         xSemaphoreTake(sem_vsync_end, portMAX_DELAY);
-        ++frame_no;
-        if (osd_showing) {
+        frame_no = frame_no + 1;
+        if (osd.visible) {
             osd.frame(frame_no);
+        }
+
+        int loaded = 0;
+        if (xQueueReceive(sdcard.osd_notify_queue, &loaded, 0)) {
+            if (loaded > 0) {
+                v06x::load_blob(); // blob loaded, pass it on to memory
+            }
         }
 
         if (frame_no % 50 == 0) {

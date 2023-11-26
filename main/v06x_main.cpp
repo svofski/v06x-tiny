@@ -4,7 +4,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "freertos/queue.h"
 
+#include "params.h"
+#include "sync.h"
 #include "memory.h"
 #include "fd1793.h"
 #include "vio.h"
@@ -18,10 +21,11 @@
 #include "version.h"
 #include "options.h"
 #include "esp_filler.h"
+#include "sdcard.h"
 
 #include "testroms.h"
 
-extern const char *TAG;
+extern SDCard sdcard;
 
 namespace v06x 
 {
@@ -164,7 +168,7 @@ void v06x_task(void *param)
     //benchmark(board);
     //test_loop(board);
 
-#define SHOP_MODE 1
+#define SHOP_MODE 0
 #if SHOP_MODE
     esp_filler::bob(50);
 
@@ -248,7 +252,28 @@ void v06x_task(void *param)
     }
 #endif
 
-    esp_filler::bob(0);
+    while (1) {
+        // spin until break
+        esp_filler::bob(0);
+
+        // break / asset loaded
+        board->reset(ResetMode::BLKVVOD);
+        AySound::reset();
+        timer->reset();
+        esp_filler::bob(50);
+        for (size_t i = 0; i < sdcard.blob.size(); ++i) {
+            memory->write(256 + i, sdcard.blob[i], false);
+        }
+        board->reset(ResetMode::BLKSBR);
+        printf("loaded rom %d\n", sdcard.blob.size());
+    }
+    //esp_filler::bob(0);
+}
+
+void load_blob()
+{
+    int cmd = CMD_EMU_BREAK;
+    xQueueSend(::emu_command_queue, &cmd, portMAX_DELAY);
 }
 
 }

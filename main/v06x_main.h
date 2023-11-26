@@ -7,5 +7,6 @@ namespace v06x
 {
 void init(SemaphoreHandle_t sem_request_handle, uint8_t * _buf0, uint8_t * _buf1);
 void create_pinned_to_core(void);
+void load_blob(void);
 }
 #endif
