@@ -47,6 +47,7 @@ struct FileInfo
     }
 };
 
+
 enum AssetKind 
 {
     AK_UNKNOWN = -1,
@@ -56,6 +57,16 @@ enum AssetKind
     AK_EDD,
     AK_BAS,
     AK_LAST = AK_BAS
+};
+
+struct Blob
+{
+    AssetKind kind;
+    std::vector<uint8_t, PSRAMAllocator<uint8_t>> bytes;
+
+    std::vector<uint8_t> std_bytes() {
+        return std::vector<uint8_t>(bytes.begin(), bytes.end());
+    }
 };
 
 struct AssetStorage
@@ -147,7 +158,7 @@ private:
 
 public:
     QueueHandle_t osd_notify_queue;
-    std::vector<uint8_t, PSRAMAllocator<uint8_t>> blob;
+    Blob blob;
 
     SDCard() : card(nullptr)
     {
@@ -202,11 +213,12 @@ public:
 
         printf("load_blob: %s size=%d\n", fi->fullpath.c_str(), fi->size);
 
-        blob.clear();
+        blob.kind = AssetStorage::guess_kind(fi->name);
+        blob.bytes.clear();
         int fd = open(fi->fullpath.c_str(), O_RDONLY);
         if (fd != -1) {
-            blob.resize(fi->size);
-            result = read(fd, blob.data(), blob.size());
+            blob.bytes.resize(fi->size);
+            result = read(fd, blob.bytes.data(), blob.bytes.size());
         }
         close(fd);
 

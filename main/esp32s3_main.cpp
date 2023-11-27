@@ -138,8 +138,10 @@ void app_main(void)
         }
 
         if (frame_no % 50 == 0) {
-            printf("fps=%d v06x_fps=%d cycles=%d frame dur=%lluus\n",
+            #if ENABLE_FRAME_REPORT
+            printf("fps=%d v06x_fps=%d cycles=%d frame dur=%lluus\r",
                 scaler::fps, scaler::v06x_fps, (esp_filler::v06x_frame_cycles - last_frame_cycles) / 50, scaler::frameduration_us);
+            #endif
             last_frame_cycles = esp_filler::v06x_frame_cycles;
         }
     }

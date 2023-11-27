@@ -37,6 +37,11 @@ static uint8_t * buf1;
 
 static void v06x_task(void *param);
 
+
+void load_blob(void);
+void rom_blob_loaded(Board * board);
+void fdd_loaded(int disk, FD1793 * fdc);
+
 void init(QueueHandle_t from_scaler, uint8_t * _buf0, uint8_t * _buf1)
 {
     que_scaler_to_emu = from_scaler;
@@ -94,6 +99,7 @@ void v06x_task(void *param)
 {
     Options.nosound = true;
     Options.nofilter = true;
+    Options.log.fdc = false;
 
     memory = new Memory(); // hopefully it gets allocated in PSRAM
     assert(memory);
@@ -257,15 +263,18 @@ void v06x_task(void *param)
         esp_filler::bob(0);
 
         // break / asset loaded
-        board->reset(ResetMode::BLKVVOD);
-        AySound::reset();
-        timer->reset();
-        esp_filler::bob(50);
-        for (size_t i = 0; i < sdcard.blob.size(); ++i) {
-            memory->write(256 + i, sdcard.blob[i], false);
+        switch (sdcard.blob.kind) {
+            case AK_ROM:
+                AySound::reset();
+                timer->reset();
+                rom_blob_loaded(board);
+                break;
+            case AK_FDD:
+                fdd_loaded(0, fdc);
+                break;
+            default:
+                break;
         }
-        board->reset(ResetMode::BLKSBR);
-        printf("loaded rom %d\n", sdcard.blob.size());
     }
     //esp_filler::bob(0);
 }
@@ -274,6 +283,28 @@ void load_blob()
 {
     int cmd = CMD_EMU_BREAK;
     xQueueSend(::emu_command_queue, &cmd, portMAX_DELAY);
+}
+
+void rom_blob_loaded(Board * board)
+{
+    board->reset(ResetMode::BLKVVOD);
+    esp_filler::bob(50);
+    for (size_t i = 0; i < sdcard.blob.bytes.size(); ++i) {
+        memory->write(256 + i, sdcard.blob.bytes[i], false);
+    }
+    board->reset(ResetMode::BLKSBR);
+    printf("loaded rom %d\n", sdcard.blob.bytes.size());
+}
+
+void fdd_loaded(int disk, FD1793 * fdc)
+{
+    auto & bytes = reinterpret_cast<std::vector<uint8_t>&>(sdcard.blob.bytes);
+    fdc->disk(disk).attach(bytes);
+    printf("attached (%d) %d bytes\n", disk, sdcard.blob.bytes.size());
+    for (int i = 0; i < 256; ++i) {
+        printf("%02x ", fdc->disk(disk).dsk->get(i));
+    }
+    printf("\n");
 }
 
 }

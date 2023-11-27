@@ -673,7 +673,7 @@ void i8080_hal_io_output(int port, int value)
     esp_filler::io->commit_palette(0x0f & esp_filler::color_index);
     #else
     // non-palette i/o
-    if (port == 0x15 || port == 0x10) {
+    if (port >= 0x15 || port == 0x10) {
         esp_filler::io->commit();           // all regular peripherals
     }
     else if (port == 0x14) {

@@ -36,14 +36,23 @@ public:
 
     DetachedDiskImage(const std::vector<uint8_t> & data) 
         : _data(data)
-    {}
+    {
+        uint32_t csum = 0, _csum = 0;
+        for (int i = 0; i < data.size(); ++i) {
+            csum += data[i];
+            _csum += _data[i];
+        }
+        printf("DetachedDiskImage:: data=%p, _data=%p csum=%08lx _csum=%08lx\n", data.data(), _data.data(), csum, _csum);
+    }
 
     ~DetachedDiskImage() override {
+        #if SAVE_FDD
         FILE * dump = fopen(".saved.fdd", "wb");
         if (dump) {
             fwrite(&_data[0], 1, _data.size(), dump);
         }
         fclose(dump);
+        #endif
     }
 
     uint8_t get(int index) override
@@ -218,6 +227,7 @@ private:
     std::string name;
 public:
     std::unique_ptr<DiskImage> dsk;
+    bool error;
 private:
     int sectorsPerTrack;
     int sectorSize;
@@ -272,6 +282,7 @@ public:
         this->readOffset = 0;
         this->readLength = 0;
         this->readSource = 0; // 0: dsk, 1: readBuffer
+        this->error = false;
         this->parse_v06c();
     }
 
@@ -332,13 +343,19 @@ public:
 
     bool read()
     {
+        this->error = false;
         bool finished = true;
         if (this->readOffset < this->readLength) {
             finished = false;
             if (this->readSource) {
                 this->data = this->readBuffer[this->readOffset];
             } else {
-                this->data = this->dsk->get(this->position + this->readOffset);
+                try {
+                    this->data = this->dsk->get(this->position + this->readOffset);
+                } catch(...) {
+                    printf("FD1793: exception in dsk->get(%d) out of bounds?\n", this->position + this->readOffset);
+                    this->error = true;
+                }
             }
             this->readOffset++;
         } else {
@@ -438,8 +455,12 @@ private:
     int _lingertime;
     int _dsksel;
 
-    int LINGER_BEFORE;
-    int LINGER_AFTER;
+    int sectorcnt = 0;
+    int readcnt = 0;
+    int fault = 0;
+
+    int LINGER_BEFORE = 0;
+    int LINGER_AFTER = 0;
 
     char debug_buf[16];
     int debug_n;
@@ -478,15 +499,18 @@ public:
     //  - restore (03) command
     //  - steps until !TRO0 goes low (track 0)
     //
-    FD1793() : _dsksel(0)
+    FD1793() : _disks{}, _dsksel(0)
     {
+        LINGER_BEFORE = 0;
         LINGER_AFTER = 2;
         _lingertime = 3;
         _stepdir = 1;
+        _status = 0;
     }
 
     void init()
     {
+        _status = 0;
     }
 
     FDisk & disk(int drive) {
@@ -506,7 +530,12 @@ public:
                 return;
             }
             finished = this->dsk().read();
-            if (finished) {
+            if (this->dsk().error) {
+                this->_status |= ST_CRCERR;
+                this->_status &= ~ST_BUSY;
+                this->_status &= ~ST_DRQ;
+            }
+            else if (finished) {
                 this->_status &= ~ST_BUSY;
                 this->_intrq = PRT_INTRQ;
             } else {
@@ -537,17 +566,16 @@ public:
         }
     }
 
-
-    int sectorcnt = 0;
-    int readcnt = 0;
-    int fault = 0;
+    int prevstatus = -1;
 
     int read(int addr)
     {
         if (Options.nofdc) return 0xff;
         int result = 0;
-        if (this->dsk().isReady()) this->_status &= ~ST_NOTREADY;
-        else this->_status |= ST_NOTREADY;
+        if (this->dsk().isReady()) 
+            this->_status &= ~ST_NOTREADY;
+        else 
+            this->_status |= ST_NOTREADY;
         int returnStatus;
         switch (addr) {
             case 0: // status
@@ -582,6 +610,13 @@ public:
                 //}
 
                 result = returnStatus;
+                if (Options.log.fdc) {
+                    if (prevstatus != result) {
+                        printf("[%02x]", result);
+                        prevstatus = result;
+                    }
+                }
+                this->_status &= ~ST_CRCERR;
                 break;
 
             case 1: // track
@@ -603,6 +638,7 @@ public:
                 if (this->readcnt == 1024) {
                     ++this->sectorcnt;
                 }
+                #if 1
                 if (Options.log.fdc) {
                     if (this->_status & ST_DRQ) {
                         printf("%02x ", result);
@@ -618,6 +654,7 @@ public:
                         }
                     }
                 }
+                #endif
                 this->_status &= ~ST_DRQ;
                 this->exec();
                 //console.log("FD1793: read data:",Utils.toHex8(result));
@@ -638,10 +675,10 @@ public:
                 break;
 
         }
-        if (!(this->_status & ST_DRQ) && Options.log.fdc) {
-            printf("FD1793: read port: %02x result: %02x status: %02x\n", addr, 
-                    result, this->_status);
-        }
+        //if (!(this->_status & ST_DRQ) && Options.log.fdc) {
+        //    printf("FD1793: read port: %02x result: %02x status: %02x\n", addr, 
+        //            result, this->_status);
+        //}
         return result;
     };
 
@@ -724,12 +761,12 @@ public:
                 this->dsk().seek(this->_track, this->_sector, this->_side);
                 this->dsk().readSector(this->_sector);
                 this->debug_n = 0;
+                this->_lingertime = this->LINGER_BEFORE;
                 if (Options.log.fdc) {
                     printf("CMD read sector m:%d p:%02x sector:%d "
-                            "status:%02x\n", multiple, param, this->_sector,
-                            this->_status);
+                            "status:%02x linger: %d\n", multiple, param, this->_sector,
+                            this->_status, this->_lingertime);
                 }
-                this->_lingertime = this->LINGER_BEFORE;
                 }
                 break;
             case 0x0A: // write sector, m = 0
@@ -778,9 +815,9 @@ public:
 
     void write(int addr, int val)
     {
-        if (Options.log.fdc) {
-            printf("FD1793: write [%02x]=%02x: ", addr, val);
-        }
+        //if (Options.log.fdc) {
+        //    printf("FD1793: write [%02x]=%02x: ", addr, val);
+        //}
         switch (addr) {
             case 0: // command
                 if (Options.log.fdc) {
@@ -820,10 +857,10 @@ public:
                 // 0 0 1 1 x S A B
                 this->_dsksel = val & 3;
                 this->_side = ((~val) >> 2) & 1; // invert side
-                if (Options.log.fdc) {
-                    printf("set pr:%02x disk select: %d side: %d\n",
-                            val, val & 3, this->_side);
-                }
+                //if (Options.log.fdc) {
+                //    printf("set pr:%02x disk select: %d side: %d\n",
+                //            val, val & 3, this->_side);
+                //}
 
                 // // SS,MON,DDEN,HLD,DS3,DS2,DS1,DS0
                 // if (val & 1) this->dsk() = this->_disks[0];
