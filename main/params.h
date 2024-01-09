@@ -17,7 +17,7 @@
 
 #define AUDIO_NBUFFERS 4
 
-#define VI53_HIGH_FREQ_MUTE 1   // mute frequencies that are too high for our samplerate
+//#define VI53_HIGH_FREQ_MUTE 1   // mute frequencies that are too high for our samplerate
 
 #define WITH_I2S_AUDIO 1        // audio output via I2S to MAX98357A
 
@@ -27,6 +27,8 @@
 
 #define AUDIO_SCALE_8253 8     // shift 8253 by this many bits
 #define AUDIO_SCALE_MASTER 4    // shift master sum by this many: 4 ok, 6 is loud but draws too much power
+
+#define VI53_GENSOUND 1
 
 #define I2S_DOUT      17
 #define I2S_BCLK      0     // was 19 in some revisions of the board

@@ -4,6 +4,7 @@
 #include <functional>
 
 #include "esp_attr.h"
+#include "params.h"
 
 class CounterUnit
 {
@@ -65,7 +66,11 @@ private:
     CounterUnit counters[3];
     uint8_t control_word;
     int sum;
+    int n_sums;
+    int clock_carry;
 
+public:
+    audio_sample_t * audio_buf; // pointer to external sound buf
 public:
     I8253();
     void out_changed();    
@@ -73,6 +78,7 @@ public:
     void write(int addr, uint8_t w8);
     int read(int addr);
     void count_clocks(int nclocks);
+    void gen_sound(int nclocks);
     void reset();
 
     int out_sum() const { return sum; }

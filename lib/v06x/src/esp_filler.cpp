@@ -22,8 +22,6 @@
 #include "audio.h"
 
 int audiobuf_index;
-audio_sample_t * audio_buf;
-
 
 #define TIMED_COMMIT
 
@@ -168,12 +166,13 @@ void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _
     io = _io;
     buffers[0] = buf1;
     buffers[1] = buf2;
+    vi53 = _vi53;
     write_buffer = 0;    
     bmp.bmp8 = buffers[0];
     fiveline_count = 0;        // count groups of 5 lines
 
     audiobuf_index = 0;
-    audio_buf = audio::audio_pp[audiobuf_index];
+    vi53->audio_buf = audio::audio_pp[audiobuf_index];
     AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
 
     io->onborderchange = [](int border) {
@@ -184,8 +183,6 @@ void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _
         mode512 = mode;
         modechange();
     };
-
-    vi53 = _vi53;
 
     inte = 0;
 }
@@ -373,7 +370,7 @@ int bob(int maxframes)
 
     // filling the void: no reason to count individual pixels in this area
     rpixels = last_rpixels = frame_rpixels = 0;
-    int ipixels = 0; 
+    int ipixels = rpixels; 
 
     ///int commit_time = 0, commit_time_pal = 0;
     int line6 = 0;
@@ -385,9 +382,15 @@ int bob(int maxframes)
         write_buffer = 0;
         bmp.bmp8 = buffers[write_buffer];
         line6 = 6;
+
+        // TODO: this should work and help against integer overflow, but it makes sound stutter for some reason
+        //rpixels -= 59904;
+        //last_rpixels -= 59904;
+        //ipixels -= 59904;
+
         frame_rpixels = rpixels;
         ay_bufpos = 0;
-        //printf("frame %d\n", frm);
+        //printf("frame %d: rpixels=%d last_rpixels=%d ipixels=%d\n", frm, rpixels, last_rpixels, ipixels);
         // frame counted in 16-pixel chunks
         // 768/16 = 48, 0x30 -> next line when i & 0x3f == 0x30
         for (int line = 0; line < 312; ++line) {
@@ -424,12 +427,14 @@ int bob(int maxframes)
                     #endif
                     rpixels += 4;
 
+                    #ifndef VI53_GENSOUND
                     if (column == 24) {
                         // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
                         vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
                         last_rpixels = rpixels;
-                        *audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
+                        *vi53->audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
                     }
+                    #endif
                 }
                 goto rowend;
             }
@@ -483,12 +488,14 @@ int bob(int maxframes)
                     }
                     rpixels += 4;
 
+                    #ifndef VI53_GENSOUND
                     if (column == 24) {
                         // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
                         vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
                         last_rpixels = rpixels;
-                        *audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
+                        *vi53->audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
                     }
+                    #endif
 
                 }
                 goto rowend;
@@ -536,12 +543,14 @@ int bob(int maxframes)
                 #endif
                 rpixels += 4;
 
+                #ifndef VI53_GENSOUND
                 if (column == 24) {
                     // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
                     vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
                     last_rpixels = rpixels;
-                    *audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
+                    *vi53->audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
                 }
+                #endif
             }
 
             // COLUMN 42: right edge of the bitplane area
@@ -594,6 +603,14 @@ rowend:
                         esp_filler::ay_bufpos = bufpos;
                     }
                 }
+                // vi53 line update
+                #ifdef VI53_GENSOUND
+                {
+                    vi53->gen_sound((rpixels - last_rpixels) >> 1);
+                    //printf("vi53_gen: %d clocks, nsamps=%d\n", (rpixels - last_rpixels) >> 1, vi53->audio_buf - audio::audio_pp[audiobuf_index]);
+                    last_rpixels = rpixels;
+                }
+                #endif
 
                 write_buffer ^= 1;
                 bmp.bmp8 = buffers[write_buffer];
@@ -607,10 +624,12 @@ rowend:
                 }
             }
 
+            #ifndef VI53_GENSOUND
             // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
             vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
             last_rpixels = rpixels;
-            *audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
+            *vi53->audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
+            #endif
         }
         keyboard::io_commit_ruslat();
         keyboard::io_read_modkeys(); 
@@ -625,11 +644,14 @@ rowend:
             usrus_holdframes = 0;
         }
 
+        //printf("vi53_gen: nsamps=%d\n", vi53->audio_buf - audio::audio_pp[audiobuf_index]);
+
         ay_bufpos_reg = ay_bufpos;
         // post audio buffer index to be taken in by the audio driver
         xQueueSend(::audio_queue, &audiobuf_index,  5 / portTICK_PERIOD_MS);
         if (++audiobuf_index == AUDIO_NBUFFERS) audiobuf_index = 0;
-        audio_buf = audio::audio_pp[audiobuf_index];
+
+        vi53->audio_buf = audio::audio_pp[audiobuf_index];
         AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
 
         int cmd;
@@ -687,8 +709,13 @@ void i8080_hal_io_output(int port, int value)
     }
     else if (port <= 0xb) {        
         if (port > 0x08) {  // timer
+            #ifndef VI53_GENSOUND
             esp_filler::vi53->count_clocks((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
             esp_filler::last_rpixels = esp_filler::rpixels;
+            #else
+            esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
+            esp_filler::last_rpixels = esp_filler::rpixels;
+            #endif
         }
         esp_filler::io->commit();           // all regular peripherals
     }

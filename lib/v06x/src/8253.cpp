@@ -295,7 +295,7 @@ int CounterUnit::read_value()
 
 
 
-I8253::I8253() : control_word(0) 
+I8253::I8253() : control_word(0), clock_carry(0)
 {
     for (int ctr = 0; ctr < 3; ++ctr) {
         counters[ctr].on_out_changed = std::bind(&I8253::out_changed, this);
@@ -304,7 +304,8 @@ I8253::I8253() : control_word(0)
 
 void I8253::out_changed()
 {
-    sum = counters[0].out + counters[1].out + counters[2].out;
+    this->sum += counters[0].out + counters[1].out + counters[2].out;
+    this->n_sums += 1;
 }
 
 void I8253::write_cw(uint8_t w8) 
@@ -359,4 +360,18 @@ void I8253::reset()
     this->counters[0].reset();
     this->counters[1].reset();
     this->counters[2].reset();
+    this->clock_carry = 0;
+}
+
+void I8253::gen_sound(int nclocks)
+{
+    int i;
+    int accu;
+    for (i = -this->clock_carry; i + 48 <= nclocks; i += 48) {
+        this->sum = counters[0].out + counters[1].out + counters[2].out;
+        this->n_sums = 1;
+        count_clocks(48);
+        *audio_buf++ = (this->sum << AUDIO_SCALE_8253) / this->n_sums;
+    }
+    this->clock_carry = nclocks - i;
 }
