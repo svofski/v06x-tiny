@@ -68,7 +68,7 @@ void audio_task(void *unused)
         }
         #endif
         for (size_t i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
-            audio_pp[num][i] += ay_pp[num][i] << 6;
+            audio_pp[num][i] += ay_pp[num][i] << AUDIO_SCALE_MASTER;
         }
         i2s_channel_write(tx_handle, audio_pp[num], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 5 / portTICK_PERIOD_MS);
         //printf("audio: buf %d -> %u\n", num, written);

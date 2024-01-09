@@ -428,7 +428,7 @@ int bob(int maxframes)
                         // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
                         vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
                         last_rpixels = rpixels;
-                        *audio_buf++ = vi53->out_sum() << 10;   // sample audio
+                        *audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
                     }
                 }
                 goto rowend;
@@ -487,7 +487,7 @@ int bob(int maxframes)
                         // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
                         vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
                         last_rpixels = rpixels;
-                        *audio_buf++ = vi53->out_sum() << 10;   // sample audio
+                        *audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
                     }
 
                 }
@@ -540,7 +540,7 @@ int bob(int maxframes)
                     // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
                     vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
                     last_rpixels = rpixels;
-                    *audio_buf++ = vi53->out_sum() << 10;   // sample audio
+                    *audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
                 }
             }
 
@@ -610,7 +610,7 @@ rowend:
             // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
             vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
             last_rpixels = rpixels;
-            *audio_buf++ = vi53->out_sum() << 10;   // sample audio
+            *audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
         }
         keyboard::io_commit_ruslat();
         keyboard::io_read_modkeys(); 

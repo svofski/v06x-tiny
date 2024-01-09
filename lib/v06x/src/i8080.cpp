@@ -361,6 +361,9 @@ static void i8080_retrieve_flags(void) {
 
 int trace_enable = 0;
 
+// this is a real life saver, otherwise instruction decoder is very slow
+#pragma GCC optimize("jump-tables")
+
 IRAM_ATTR
 int i8080_execute(int opcode) {
     #if I8080_OUT_DELAYED

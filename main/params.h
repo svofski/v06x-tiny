@@ -25,6 +25,9 @@
 #define AUDIO_SAMPLERATE        (AUDIO_SAMPLES_PER_FRAME * 50)
 #define AUDIO_SAMPLE_SIZE       2 // int16_t
 
+#define AUDIO_SCALE_8253 8     // shift 8253 by this many bits
+#define AUDIO_SCALE_MASTER 4    // shift master sum by this many: 4 ok, 6 is loud but draws too much power
+
 #define I2S_DOUT      17
 #define I2S_BCLK      0     // was 19 in some revisions of the board
 #define I2S_LRC       18
