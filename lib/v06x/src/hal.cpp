@@ -53,13 +53,13 @@ void i8080_hal_memory_write_word(int addr, int word, bool stack)
     memory->write(addr + 1, word >> 8, stack);
 }
 
-IRAM_ATTR
-int i8080_hal_io_input(int port)
-{
-    int value = io->input(port);
-    //printf("input port %02x = %02x\n", port, value);
-    return value;
-}
+//IRAM_ATTR
+//int i8080_hal_io_input(int port)
+//{
+//    int value = io->input(port);
+//    //printf("input port %02x = %02x\n", port, value);
+//    return value;
+//}
 
 // IRAM_ATTR
 // void i8080_hal_io_output(int port, int value)

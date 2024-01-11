@@ -32,18 +32,12 @@ public:
     };
 
     int out;
-    std::function<void(void)> on_out_changed;
     uint16_t loadvalue;
     int value;
 
 public:
     CounterUnit();
     void reset();
-
-    void set_out(int value) {        
-        this->out = value;
-        on_out_changed();
-    }
 
     void SetMode(int new_mode, int new_latch_mode, int new_bcd_mode);
     void Latch(uint8_t w8);
@@ -65,22 +59,17 @@ class I8253
 private:
     CounterUnit counters[3];
     uint8_t control_word;
-    int sum;
-    int n_sums;
     int clock_carry;
 
 public:
     audio_sample_t * audio_buf; // pointer to external sound buf
 public:
     I8253();
-    void out_changed();    
     void write_cw(uint8_t w8);
     void write(int addr, uint8_t w8);
     int read(int addr);
     void count_clocks(int nclocks);
     void gen_sound(int nclocks);
     void reset();
-
-    int out_sum() const { return sum; }
 };
 

@@ -7,7 +7,7 @@
 
 #define SCALER_CORE     1
 #define EMU_CORE        0
-#define AUDIO_CORE      0            // ideally should be a core separate from the emulator, but there's some sync problem
+#define AUDIO_CORE      1            // ideally should be a core separate from the emulator, but there's some sync problem
 #define SDCARD_CORE     0
 
 #define SCALER_PRIORITY (configMAX_PRIORITIES - 1)

@@ -708,7 +708,7 @@ void i8080_hal_io_output(int port, int value)
         esp_filler::io->commit();           // all regular peripherals
     }
     else if (port <= 0xb) {        
-        if (port > 0x08) {  // timer
+        if (port > 0x08) {
             #ifndef VI53_GENSOUND
             esp_filler::vi53->count_clocks((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
             esp_filler::last_rpixels = esp_filler::rpixels;
@@ -728,6 +728,18 @@ void i8080_hal_io_output(int port, int value)
     }
     #endif
     //esp_filler::io->commit();
+}
+
+IRAM_ATTR
+int i8080_hal_io_input(int port)
+{
+    if (port >= 0x08 and port <= 0x0b) {
+        esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1);
+        esp_filler::last_rpixels = esp_filler::rpixels;
+    }
+    int value = esp_filler::io->input(port);
+    //printf("input port %02x = %02x\n", port, value);
+    return value;
 }
 
 void i8080_hal_iff(int on)

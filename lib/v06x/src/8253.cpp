@@ -56,27 +56,27 @@ void CounterUnit::SetMode(int new_mode, int new_latch_mode, int new_bcd_mode)
 
     switch(this->mode_int) {
         case 0:
-            this->set_out(0);
+            this->out = 0;
             this->armed = true;
             this->enabled = false;
             break;
         case 1:
-            this->set_out(1);
+            this->out = 1;
             this->armed = true;
             this->enabled = false;
             break;
         case 2:
-            this->set_out(1);
+            this->out = 1;
             this->enabled = false;
             // armed?
             break;
         case 3:
-            this->set_out(1);
+            this->out = 1;
             this->enabled = false;
             // armed?
             break;
         default:
-            this->set_out(1);
+            this->out = 1;
             this->enabled = false;
             // armed?
     }
@@ -97,7 +97,7 @@ void CounterUnit::mode0(int nclocks) // Interrupt on terminal count
         this->value = this->loadvalue;
         this->enabled = true;
         this->armed = true;
-        this->set_out(0);
+        this->out = 0;
         this->load = false;
     }
     if (this->enabled) {
@@ -105,7 +105,7 @@ void CounterUnit::mode0(int nclocks) // Interrupt on terminal count
         this->value -= nclocks;
         if (this->value <= 0) {
             if (this->armed) {
-                if (previous != 0) this->set_out(1);
+                if (previous != 0) this->out = 1;
                 this->armed = false;
             }
             this->value += this->bcd ? 10000 : 65536;
@@ -150,7 +150,7 @@ void CounterUnit::mode2(int nclocks)
 }
 
 IRAM_ATTR
-inline void CounterUnit::mode3(int nclocks)
+/*inline*/ void CounterUnit::mode3(int nclocks)
 {
     // Square wave generator
     if (!this->enabled && this->load) {
@@ -166,7 +166,7 @@ inline void CounterUnit::mode3(int nclocks)
                 #if VI53_HIGH_FREQ_MUTE
                 if (this->loadvalue > 96) {
                 #endif
-                    this->set_out(this->out ^= 1);
+                this->out ^= 1;
                 #if VI53_HIGH_FREQ_MUTE
                 }
                 #endif
@@ -297,15 +297,6 @@ int CounterUnit::read_value()
 
 I8253::I8253() : control_word(0), clock_carry(0)
 {
-    for (int ctr = 0; ctr < 3; ++ctr) {
-        counters[ctr].on_out_changed = std::bind(&I8253::out_changed, this);
-    }
-}
-
-void I8253::out_changed()
-{
-    this->sum += counters[0].out + counters[1].out + counters[2].out;
-    this->n_sums += 1;
 }
 
 void I8253::write_cw(uint8_t w8) 
@@ -348,6 +339,7 @@ int I8253::read(int addr)
     }
 }
 
+IRAM_ATTR
 void I8253::count_clocks(int nclocks)
 {
     this->counters[0].count_clocks(nclocks);
@@ -365,8 +357,8 @@ void I8253::reset()
 
 void I8253::gen_sound(int nclocks)
 {
+    #if 0
     int i;
-    int accu;
     for (i = -this->clock_carry; i + 48 <= nclocks; i += 48) {
         this->sum = counters[0].out + counters[1].out + counters[2].out;
         this->n_sums = 1;
@@ -374,4 +366,20 @@ void I8253::gen_sound(int nclocks)
         *audio_buf++ = (this->sum << AUDIO_SCALE_8253) / this->n_sums;
     }
     this->clock_carry = nclocks - i;
+    #else
+    // 3/16 is best but it doesn't mean that it's good, still sounds like crap and takes more resources than possible
+    // 16/3 maybe an acceptable compromise
+    constexpr int mul = 16;
+    constexpr int div = 3; 
+    int i;
+    for (i = -this->clock_carry; i + 48 <= nclocks; i += 48) {
+        int accu = 0;
+        for (int j = 0; j < div; j += 1) {
+            count_clocks(mul);
+            accu += counters[0].out + counters[1].out + counters[2].out;
+        }
+        *audio_buf++ = (accu << AUDIO_SCALE_8253) / div;
+    }
+    this->clock_carry = nclocks - i;
+    #endif
 }
