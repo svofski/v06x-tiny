@@ -644,7 +644,18 @@ rowend:
             usrus_holdframes = 0;
         }
 
-        //printf("vi53_gen: nsamps=%d\n", vi53->audio_buf - audio::audio_pp[audiobuf_index]);
+        {
+            int nsamps = vi53->audio_buf - audio::audio_pp[audiobuf_index];
+            if (nsamps != 312 * 2) {
+                printf("WTF: vi53_gen: nsamps=%d\n", nsamps);
+            }
+        }
+        //if (frm >= 200 && frm <= 203) {
+        //    for (int i = 0; i < 624; ++i) {
+        //        printf("%8d", audio::audio_pp[audiobuf_index][i]);
+        //    }
+        //    printf("\n---\n");
+        //}
 
         ay_bufpos_reg = ay_bufpos;
         // post audio buffer index to be taken in by the audio driver
@@ -708,7 +719,7 @@ void i8080_hal_io_output(int port, int value)
         esp_filler::io->commit();           // all regular peripherals
     }
     else if (port <= 0xb) {        
-        if (port > 0x08) {
+        if (port >= 0x08) {
             #ifndef VI53_GENSOUND
             esp_filler::vi53->count_clocks((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
             esp_filler::last_rpixels = esp_filler::rpixels;

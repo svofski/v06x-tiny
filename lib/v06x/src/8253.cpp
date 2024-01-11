@@ -213,7 +213,6 @@ void CounterUnit::count_clocks(int nclocks)
     }
 }
 
-
 void CounterUnit::write_value(uint8_t w8) {
     if (this->latch_mode == 3) {
         // lsb, msb             
@@ -293,10 +292,10 @@ int CounterUnit::read_value()
     return value;
 }
 
-
-
-I8253::I8253() : control_word(0), clock_carry(0)
+I8253::I8253() : control_word(0)
 {
+    this->counted_carry = 0;
+    this->accu_carry = 0;
 }
 
 void I8253::write_cw(uint8_t w8) 
@@ -352,34 +351,54 @@ void I8253::reset()
     this->counters[0].reset();
     this->counters[1].reset();
     this->counters[2].reset();
-    this->clock_carry = 0;
+    //this->clock_carry = 0;
+    this->counted_carry = 0;
+    this->accu_carry = 0;
 }
 
+IRAM_ATTR
 void I8253::gen_sound(int nclocks)
 {
-    #if 0
-    int i;
-    for (i = -this->clock_carry; i + 48 <= nclocks; i += 48) {
-        this->sum = counters[0].out + counters[1].out + counters[2].out;
-        this->n_sums = 1;
-        count_clocks(48);
-        *audio_buf++ = (this->sum << AUDIO_SCALE_8253) / this->n_sums;
+    constexpr int mul = 6;              // 6 == good sound but begins flickering in bolderm when diagonal scrolling
+    constexpr int div = 48 / mul; 
+    int remaining = nclocks;
+    int counted = this->counted_carry;
+    int accu = this->accu_carry;
+    int align = 0;
+    if (counted) {
+        align = std::min(mul - counted % mul, remaining);        // how much to add to make a full "mul"
     }
-    this->clock_carry = nclocks - i;
-    #else
-    // 3/16 is best but it doesn't mean that it's good, still sounds like crap and takes more resources than possible
-    // 16/3 maybe an acceptable compromise
-    constexpr int mul = 16;
-    constexpr int div = 3; 
-    int i;
-    for (i = -this->clock_carry; i + 48 <= nclocks; i += 48) {
-        int accu = 0;
-        for (int j = 0; j < div; j += 1) {
-            count_clocks(mul);
+
+    //if (accu != 0) {
+    //    printf("accu_carry=%d nclocks=%d\n", accu, nclocks);
+    //}
+    //if (counted != 0) {
+    //    printf("nclk=%d cc=%d align=%d a+c=%d\n", nclocks, counted, align, align + counted);
+    //}
+
+    //if (nclocks < mul) {
+    //    printf("nclocks=%d\n", nclocks);
+    //}
+
+    for (; remaining > 0; ) {
+        int count = align;
+        if (!count) count = std::min(mul, remaining);
+        count_clocks(count);
+        counted += count;
+        remaining -= count;
+        count += align;
+        align = 0;
+        if (count == mul) {
             accu += counters[0].out + counters[1].out + counters[2].out;
         }
-        *audio_buf++ = (accu << AUDIO_SCALE_8253) / div;
+        if (counted >= 48) {
+            *audio_buf++ = (accu << AUDIO_SCALE_8253) / div;
+            accu = 0;
+            counted -= 48;
+        }
     }
-    this->clock_carry = nclocks - i;
-    #endif
+
+    // carry over to the next call
+    this->counted_carry = counted; 
+    this->accu_carry = accu;
 }

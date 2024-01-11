@@ -59,7 +59,9 @@ class I8253
 private:
     CounterUnit counters[3];
     uint8_t control_word;
-    int clock_carry;
+    //int clock_carry;
+    int counted_carry;
+    int accu_carry;
 
 public:
     audio_sample_t * audio_buf; // pointer to external sound buf
