@@ -262,8 +262,6 @@ void v06x_task(void *param)
         // spin until break
         esp_filler::bob(0);
 
-        printf("asset loaded\n");
-
         // break / asset loaded
         switch (sdcard.blob.kind) {
             case AK_ROM:
@@ -278,11 +276,15 @@ void v06x_task(void *param)
                 break;
         }
     }
-    //esp_filler::bob(0);
 }
 
-void load_blob()
+std::unique_ptr<DiskImage> blob_dsk;
+
+void blob_loaded()
 {
+    auto & bytes = reinterpret_cast<std::vector<uint8_t>&>(sdcard.blob.bytes); // erase allocator
+    blob_dsk = make_unique<DetachedDiskImage>(bytes);
+
     int cmd = CMD_EMU_BREAK;
     xQueueSend(::emu_command_queue, &cmd, portMAX_DELAY);
 }
@@ -300,13 +302,16 @@ void rom_blob_loaded(Board * board)
 
 void fdd_loaded(int disk, FD1793 * fdc)
 {
-    auto & bytes = reinterpret_cast<std::vector<uint8_t>&>(sdcard.blob.bytes);
-    fdc->disk(disk).attach(bytes);
+    fdc->disk(disk).attach(std::move(blob_dsk));
     printf("attached (%d) %d bytes\n", disk, sdcard.blob.bytes.size());
-    //for (int i = 0; i < 256; ++i) {
-    //    printf("%02x ", fdc->disk(disk).dsk->get(i));
-    //}
-    //printf("\n");
+
+    #if 0
+    printf("after attachment blob_dsk=%p\n", blob_dsk.get());
+    for (int i = 0; i < 256; ++i) {
+        printf("%02x ", fdc->disk(disk).dsk->get(i));
+    }
+    printf("\n");
+    #endif
 }
 
 }

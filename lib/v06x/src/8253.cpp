@@ -353,7 +353,6 @@ void I8253::reset()
     this->counters[0].reset();
     this->counters[1].reset();
     this->counters[2].reset();
-    //this->clock_carry = 0;
     this->counted_carry = 0;
     this->accu_carry = 0;
 }

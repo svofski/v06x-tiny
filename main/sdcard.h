@@ -216,8 +216,6 @@ public:
         blob.kind = AssetStorage::guess_kind(fi->name);
         blob.bytes.clear();
 
-        //sdcard_busy = true; // can't do it like this because we could be in the middle of keyboard transaction?
-
         keyboard::osd_takeover(true);
 
         int fd = open(fi->fullpath.c_str(), O_RDONLY);
@@ -242,7 +240,6 @@ public:
         close(fd);
 
         keyboard::osd_takeover(false);
-        //sdcard_busy = false;
 
         printf("load_blob: done, %d bytes read\n", result);
 

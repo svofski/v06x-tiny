@@ -35,7 +35,7 @@ public:
     DetachedDiskImage() = delete;
 
     DetachedDiskImage(const std::vector<uint8_t> & data) 
-        : _data(data)
+        : _data(data) // allocating and copying 800KB is too slow for the main thread
     {
         uint32_t csum = 0, _csum = 0;
         for (int i = 0; i < data.size(); ++i) {
@@ -53,6 +53,7 @@ public:
         }
         fclose(dump);
         #endif
+        printf("~DetachedDiskImage\n");
     }
 
     uint8_t get(int index) override
@@ -251,7 +252,6 @@ public:
         this->init();
     }
 
-
     void attach(const std::vector<uint8_t> & data) 
     {
         this->dsk = std::make_unique<DetachedDiskImage>(data);
@@ -264,6 +264,11 @@ public:
         if (this->dsk->size() == 0) {
             this->dsk = std::make_unique<DirectoryImage>(file);
         }
+        this->init();
+    }
+
+    void attach(std::unique_ptr<DiskImage> dsk) {
+        this->dsk = std::move(dsk);
         this->init();
     }
 

@@ -133,7 +133,7 @@ void app_main(void)
         int loaded = 0;
         if (xQueueReceive(sdcard.osd_notify_queue, &loaded, 0)) {
             if (loaded > 0) {
-                v06x::load_blob(); // blob loaded, pass it on to memory
+                v06x::blob_loaded(); // blob loaded, pass it on to memory
             }
         }
 
