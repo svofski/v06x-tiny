@@ -11,6 +11,8 @@
 //  2:  TX port 01 (PC) value, ruslat led           RX: bit 1: VVOD, bit 2: SBR, bits 5,6,7 modkeys SS,US,RUSLAT
 //  3:                                              RX: rows
 
+extern bool sdcard_busy;
+
 namespace keyboard
 {
 
@@ -75,7 +77,11 @@ void select_columns(uint8_t pa)
     transaction_active = ret == ESP_OK;
     ESP_ERROR_CHECK(ret);
 }
-
+//          |
+//          |
+// transaction continues to read_rows()
+//          |
+//          V
 void read_rows()
 {
     if (transaction_active) {
@@ -95,27 +101,6 @@ void read_rows()
     //printf("rx: %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1]);
 }
 
-void read_modkeys()
-{
-    esp_err_t ret;
-    if (transaction_active) {
-        ret = spi_device_polling_end(spimatrix, portMAX_DELAY);
-        transaction_active = false;
-    }
-    transaction.tx_data[0] = 0xe7;
-    ret = spi_device_polling_transmit(spimatrix, &transaction);
-    
-    //printf("m: %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1]);
-    state.pc = transaction.rx_data[0] & PC_MODKEYS_MASK;
-    state.blk = transaction.rx_data[0] & BLK_MASK;
-//
-//    // update io modkeys automatically
-//    if (!osd_enable) {
-//        io_state.pc = state.pc;
-//        io_state.blk = state.blk;
-//    }
-}
-
 void out_ruslat(uint8_t w8)
 {
     state.ruslat = w8;
@@ -132,7 +117,23 @@ void commit_ruslat()
     transaction.tx_data[0] = 0xe8;
     transaction.tx_data[1] = state.ruslat ^ PC_BIT_INDRUS;  // apply inverter D81.3
     ret = spi_device_polling_start(spimatrix, &transaction, portMAX_DELAY);
-    transaction_active = true;
+    transaction_active = true; // --> must finish in read_modkeys()
+}
+//       |
+//       V
+void read_modkeys()
+{
+    esp_err_t ret;
+    if (transaction_active) {
+        ret = spi_device_polling_end(spimatrix, portMAX_DELAY);
+    }
+    transaction.tx_data[0] = 0xe7;
+    ret = spi_device_polling_transmit(spimatrix, &transaction);
+    transaction_active = false;
+
+    //printf("m: %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1]);
+    state.pc = transaction.rx_data[0] & PC_MODKEYS_MASK;
+    state.blk = transaction.rx_data[0] & BLK_MASK;
 }
 
 bool vvod_pressed()
@@ -144,7 +145,6 @@ bool sbros_pressed()
 {
     return (state.blk & BLK_MASK) == (BLK_MASK & ~BLK_BIT_SBROS); // SBROS without VVOD
 }
-
 
 IRAM_ATTR
 void io_select_columns(uint8_t pa)
@@ -184,6 +184,8 @@ void io_commit_ruslat()
 // when osd takes over keyboard control, block all io_*() calls
 void osd_takeover(bool enable)
 {
+    while (transaction_active)
+        taskYIELD();
     osd_enable = enable;
     io_state.blk = BLK_MASK;
     io_state.pc = PC_MODKEYS_MASK;

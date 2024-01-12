@@ -262,6 +262,8 @@ void v06x_task(void *param)
         // spin until break
         esp_filler::bob(0);
 
+        printf("asset loaded\n");
+
         // break / asset loaded
         switch (sdcard.blob.kind) {
             case AK_ROM:
@@ -301,10 +303,10 @@ void fdd_loaded(int disk, FD1793 * fdc)
     auto & bytes = reinterpret_cast<std::vector<uint8_t>&>(sdcard.blob.bytes);
     fdc->disk(disk).attach(bytes);
     printf("attached (%d) %d bytes\n", disk, sdcard.blob.bytes.size());
-    for (int i = 0; i < 256; ++i) {
-        printf("%02x ", fdc->disk(disk).dsk->get(i));
-    }
-    printf("\n");
+    //for (int i = 0; i < 256; ++i) {
+    //    printf("%02x ", fdc->disk(disk).dsk->get(i));
+    //}
+    //printf("\n");
 }
 
 }

@@ -6,6 +6,8 @@
 
 #include "../../../main/params.h"
 
+#pragma GCC optimize("O3,jump-tables") // unroll-loops probably isn't helping here
+
 static uint16_t tobcd(uint16_t x) {
     int result = 0;
     for (int i = 0; i < 4; ++i) {
@@ -91,7 +93,7 @@ void CounterUnit::Latch(uint8_t w8) {
 }
 
 IRAM_ATTR
-void CounterUnit::mode0(int nclocks) // Interrupt on terminal count
+inline void CounterUnit::mode0(int nclocks) // Interrupt on terminal count
 {    
     if (this->load) {
         this->value = this->loadvalue;
@@ -150,7 +152,7 @@ void CounterUnit::mode2(int nclocks)
 }
 
 IRAM_ATTR
-/*inline*/ void CounterUnit::mode3(int nclocks)
+inline void CounterUnit::mode3(int nclocks)
 {
     // Square wave generator
     if (!this->enabled && this->load) {
@@ -359,30 +361,20 @@ void I8253::reset()
 IRAM_ATTR
 void I8253::gen_sound(int nclocks)
 {
-    constexpr int mul = 6;              // 6 == good sound but begins flickering in bolderm when diagonal scrolling
-    constexpr int div = 48 / mul; 
-    int remaining = nclocks;
-    int counted = this->counted_carry;
-    int accu = this->accu_carry;
-    int align = 0;
+    constexpr int16_t mul = 12;              // 6 == good sound but begins flickering in bolderm when diagonal scrolling
+    constexpr int16_t div = 48 / mul; 
+    int16_t remaining = nclocks;
+    int16_t counted = this->counted_carry;
+    int16_t accu = this->accu_carry;
+    int16_t align = 0;
     if (counted) {
-        align = std::min(mul - counted % mul, remaining);        // how much to add to make a full "mul"
+        align = std::min((int16_t)(mul - counted % mul), remaining);        // how much to add to make a full "mul"
     }
 
-    //if (accu != 0) {
-    //    printf("accu_carry=%d nclocks=%d\n", accu, nclocks);
-    //}
-    //if (counted != 0) {
-    //    printf("nclk=%d cc=%d align=%d a+c=%d\n", nclocks, counted, align, align + counted);
-    //}
-
-    //if (nclocks < mul) {
-    //    printf("nclocks=%d\n", nclocks);
-    //}
+    int16_t count = align;
+    if (!count) count = std::min(mul, remaining);
 
     for (; remaining > 0; ) {
-        int count = align;
-        if (!count) count = std::min(mul, remaining);
         count_clocks(count);
         counted += count;
         remaining -= count;
@@ -396,6 +388,8 @@ void I8253::gen_sound(int nclocks)
             accu = 0;
             counted -= 48;
         }
+
+        count = std::min(mul, remaining);
     }
 
     // carry over to the next call

@@ -8,14 +8,14 @@
 #define SCALER_CORE     1
 #define EMU_CORE        0
 #define AUDIO_CORE      1            // ideally should be a core separate from the emulator, but there's some sync problem
-#define SDCARD_CORE     0
+#define SDCARD_CORE     1
 
 #define SCALER_PRIORITY (configMAX_PRIORITIES - 1)
 #define EMU_PRIORITY    (configMAX_PRIORITIES - 1)
 #define AUDIO_PRIORITY  (configMAX_PRIORITIES - 2)
 #define SDCARD_PRIORITY (configMAX_PRIORITIES - 4)
 
-#define AUDIO_NBUFFERS 4
+#define AUDIO_NBUFFERS 2
 
 //#define VI53_HIGH_FREQ_MUTE 1   // mute frequencies that are too high for our samplerate
 

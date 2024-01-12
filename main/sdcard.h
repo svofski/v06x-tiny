@@ -215,12 +215,34 @@ public:
 
         blob.kind = AssetStorage::guess_kind(fi->name);
         blob.bytes.clear();
+
+        //sdcard_busy = true; // can't do it like this because we could be in the middle of keyboard transaction?
+
+        keyboard::osd_takeover(true);
+
         int fd = open(fi->fullpath.c_str(), O_RDONLY);
         if (fd != -1) {
             blob.bytes.resize(fi->size);
+            #if READ_BLOBS_IN_BLOCKS
+            constexpr int BLOCK_SZ = 4096;
+            result = 0;
+            while (result < blob.bytes.size()) {
+                size_t bytes_read = read(fd, blob.bytes.data() + result, BLOCK_SZ);
+                result += bytes_read;
+                if (bytes_read < BLOCK_SZ) {
+                    break;
+                }
+                putchar('.');
+                vTaskDelay(1);
+            }
+            #else
             result = read(fd, blob.bytes.data(), blob.bytes.size());
+            #endif
         }
         close(fd);
+
+        keyboard::osd_takeover(false);
+        //sdcard_busy = false;
 
         printf("load_blob: done, %d bytes read\n", result);
 

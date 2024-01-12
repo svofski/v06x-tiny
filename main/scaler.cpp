@@ -129,6 +129,7 @@ void main_screen_turn_on()
 }
 
 
+#pragma GCC optimize("O3,unroll-loops") // unroll-loops probably isn't helping here
 
 
 static void tick_1s(void *arg)

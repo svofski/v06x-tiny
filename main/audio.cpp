@@ -62,18 +62,20 @@ void audio_task(void *unused)
     while(1) {
         int num;
         size_t written;
-        xQueueReceive(audio_queue, &num, portMAX_DELAY);
-        #ifdef CLEAN_BEEP_TEST
-        for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
-            audio_pp[num][i] = ((i / 12) & 1) << 13;
+        BaseType_t result = xQueueReceive(audio_queue, &num, portMAX_DELAY);
+        if (result == pdTRUE) {
+            #ifdef CLEAN_BEEP_TEST
+            for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
+                audio_pp[num][i] = ((i / 12) & 1) << 13;
+            }
+            #endif
+            AySound::gen_sound(AUDIO_SAMPLES_PER_FRAME - esp_filler::ay_bufpos_reg, esp_filler::ay_bufpos_reg);
+            for (size_t i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
+                //audio_pp[num][i] += ay_pp[num][i] << AUDIO_SCALE_MASTER;
+                audio_copy[i] = audio_pp[num][i] + (ay_pp[num][i] << AUDIO_SCALE_MASTER);
+            }
         }
-        #endif
-        AySound::gen_sound(AUDIO_SAMPLES_PER_FRAME - esp_filler::ay_bufpos_reg, esp_filler::ay_bufpos_reg);
-        for (size_t i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
-            //audio_pp[num][i] += ay_pp[num][i] << AUDIO_SCALE_MASTER;
-            audio_copy[i] = audio_pp[num][i] + (ay_pp[num][i] << AUDIO_SCALE_MASTER);
-        }
-        i2s_channel_write(tx_handle, audio_copy, AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 50 / portTICK_PERIOD_MS);
+        i2s_channel_write(tx_handle, audio_copy, AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 5 / portTICK_PERIOD_MS);
         //i2s_channel_write(tx_handle, audio_pp[num], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 50 / portTICK_PERIOD_MS);
         //printf("audio: buf %d -> %u\n", num, written);
         //printf("ay: falta %d samps\n", AUDIO_SAMPLES_PER_FRAME - esp_filler::ay_bufpos_reg);
