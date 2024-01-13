@@ -28,6 +28,8 @@
 #define AUDIO_SCALE_8253 8     // shift 8253 by this many bits
 #define AUDIO_SCALE_MASTER 4    // shift master sum by this many: 4 ok, 6 is loud but draws too much power
 
+#define VI53_CLOCKS_PER_SAMPLE  48  // 1.5MHz clocks per output sample
+
 #define VI53_GENSOUND 1
 
 #define I2S_DOUT      17

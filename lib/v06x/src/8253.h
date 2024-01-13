@@ -10,10 +10,10 @@ class CounterUnit
 {
     friend class TestOfCounterUnit;
 
-    uint16_t latch_value;
-    uint8_t write_state;
-    uint8_t latch_mode;
-    uint8_t mode_int;
+    int latch_value;
+    int write_state;
+    int latch_mode;
+    int mode_int;
 
     uint8_t write_lsb;
     uint8_t write_msb;

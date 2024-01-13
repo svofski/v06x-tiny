@@ -361,31 +361,32 @@ IRAM_ATTR
 void I8253::gen_sound(int nclocks)
 {
     constexpr int16_t mul = 12;              // 6 == good sound but begins flickering in bolderm when diagonal scrolling
-    constexpr int16_t div = 48 / mul; 
+    constexpr int16_t div = VI53_CLOCKS_PER_SAMPLE / mul; 
     int16_t remaining = nclocks;
     int16_t counted = this->counted_carry;
     int16_t accu = this->accu_carry;
-    int16_t align = 0;
+    int16_t count_rem = 0;
+    int16_t count = 0;
     if (counted) {
-        align = std::min((int16_t)(mul - counted % mul), remaining);        // how much to add to make a full "mul"
+        // not full clocks count remainder from the previous call
+        count_rem = counted % mul;                                      // how much of the last "mul" was counted
+        count = std::min((int16_t)(mul - count_rem), remaining);        // how much to add to make a full "mul"
     }
 
-    int16_t count = align;
-    if (!count) count = std::min(mul, remaining);
+    if (!count) count = std::min(mul, remaining);   // if there's no remainder, count as much as possible
 
     for (; remaining > 0; ) {
         count_clocks(count);
         counted += count;
         remaining -= count;
-        count += align;
-        align = 0;
-        if (count == mul) {
+        if (count + count_rem == mul) {
             accu += counters[0].out + counters[1].out + counters[2].out;
         }
-        if (counted >= 48) {
+        count_rem = 0;  // forget remainder
+        if (counted >= VI53_CLOCKS_PER_SAMPLE) {
             *audio_buf++ = (accu << AUDIO_SCALE_8253) / div;
             accu = 0;
-            counted -= 48;
+            counted -= VI53_CLOCKS_PER_SAMPLE;
         }
 
         count = std::min(mul, remaining);
