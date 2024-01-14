@@ -23,8 +23,6 @@
 
 int audiobuf_index;
 
-#define TIMED_COMMIT
-
 namespace esp_filler 
 {
 
@@ -81,15 +79,10 @@ int visible;
 int mode512;
 volatile int border_index;
 int fiveline_count;
-#ifndef TIMED_COMMIT
-int color_index;    // index of color at the tip of the beam
-#endif
 
-#ifdef TIMED_COMMIT
 bool commit_pal;
 int commit_io;
 uint8_t palette_byte;
-#endif
 
 volatile int v06x_framecount = 0;
 volatile int v06x_frame_cycles = 0;
@@ -255,17 +248,12 @@ inline void slab8()
         uint8_t i3 = shiftNicePixels(nicepixels);
         uint8_t i4 = shiftNicePixels(nicepixels);
         *bmp.bmp16++ = py2[i1];
-        *bmp.bmp16++ = py2[
-#ifndef TIMED_COMMIT            
-            color_index = 
-#endif            
-            i2];
+        *bmp.bmp16++ = py2[i2];
         *bmp.bmp16++ = py2[i3];
         *bmp.bmp16++ = py2[i4];
     }
 }
 
-#ifdef TIMED_COMMIT
 IRAM_ATTR
 inline void slab8_pal()
 {
@@ -299,7 +287,6 @@ inline void slab8_pal()
         *bmp.bmp16++ = py2[i4];
     }
 }
-#endif
 
 // full column slab in the vertical border area
 IRAM_ATTR
@@ -330,12 +317,12 @@ void borderslab()
         c = py2[border_index];
     }
     *bmp.bmp16++ = c;
-    #ifdef TIMED_COMMIT
+
     if (commit_io && --commit_io == 0) {
         io->commit();
         c = py2[border_index];
     }
-    #endif
+
     *bmp.bmp32++ = c << 16 | c;
     *bmp.bmp32++ = c << 16 | c;
 }
@@ -412,31 +399,19 @@ int bob(int maxframes)
                             }
                             ipixels += i8080cpu::i8080_execute(0xff); // rst7
                         }
-                        #ifdef TIMED_COMMIT
+
                         commit_pal = false;
-                        #endif
+
                         ipixels += i8080cpu::i8080_instruction(); // divisible by 4
-                        #ifdef TIMED_COMMIT
+
                         if (commit_pal) commit_palette(border_index);
                         if (commit_io && --commit_io == 0) {
                             io->commit();
                         }
-                        #endif
+
                         irq = false;
                     }
-                    #ifndef TIMED_COMMIT
-                    color_index = border_index; // important for commit palette
-                    #endif
                     rpixels += 4;
-
-                    #ifndef VI53_GENSOUND
-                    if (column == 24) {
-                        // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
-                        vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
-                        last_rpixels = rpixels;
-                        *vi53->audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
-                    }
-                    #endif
                 }
                 goto rowend;
             }
@@ -454,18 +429,13 @@ int bob(int maxframes)
                     bool xoxo = false;
                     #endif
                     if (ipixels <= rpixels) [[unlikely]] {
-                        #ifdef TIMED_COMMIT
                         commit_pal = false;
-                        #endif
                         //if (i8080cpu::trace_enable) printf("c=%d rpixel=%d ", column, rpixels - rpixel0);
                         ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                         #if DEBUG_INSTRUCTION_STRIPES
                         xoxo = true;
                         #endif
                     }
-                    #ifndef TIMED_COMMIT
-                    color_index = border_index;
-                    #endif
                     if (column >= 10 && column < 42) {
                         vborderslab();
                         #if DEBUG_INSTRUCTION_STRIPES
@@ -481,24 +451,12 @@ int bob(int maxframes)
                         borderslab();
                     }
                     else {
-                        #ifdef TIMED_COMMIT
                         if (commit_pal) commit_palette(border_index);
                         if (commit_io && --commit_io == 0) {
                             io->commit();
                         }
-                        #endif
                     }
                     rpixels += 4;
-
-                    #ifndef VI53_GENSOUND
-                    if (column == 24) {
-                        // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
-                        vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
-                        last_rpixels = rpixels;
-                        *vi53->audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
-                    }
-                    #endif
-
                 }
                 goto rowend;
             }
@@ -509,14 +467,9 @@ int bob(int maxframes)
             for (column = 0; column < 10; ++column) {
                 // (4, 8, 12, 16, 20, 24) * 4
                 if (ipixels <= rpixels) [[unlikely]] {
-                    #ifdef TIMED_COMMIT
                     commit_pal = false;
-                    #endif
                     ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                 }
-                #ifndef TIMED_COMMIT
-                color_index = border_index; // important for commit palette
-                #endif
                 rpixels += 4;
             }
 
@@ -530,36 +483,19 @@ int bob(int maxframes)
             for (; column < 42; ++column) {
                 // (4, 8, 12, 16, 20, 24) * 4
                 if (ipixels <= rpixels) [[unlikely]] {
-                    #ifdef TIMED_COMMIT
                     commit_pal = false;
-                    #endif
                     ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                 }
 
                 //?color_index = border_index; // important for commit palette
                 ++fb_column;
-                #ifdef TIMED_COMMIT
                 slab8_pal();
-                #else
-                slab8();        // will update color_index
-                #endif
                 rpixels += 4;
-
-                #ifndef VI53_GENSOUND
-                if (column == 24) {
-                    // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
-                    vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
-                    last_rpixels = rpixels;
-                    *vi53->audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
-                }
-                #endif
             }
 
             // COLUMN 42: right edge of the bitplane area
             if (ipixels <= rpixels) [[unlikely]] {
-                #ifdef TIMED_COMMIT
                 commit_pal = false;
-                #endif
                 ipixels += i8080cpu::i8080_instruction(); // divisible by 4
             }
             //?color_index = border_index;
@@ -571,20 +507,13 @@ int bob(int maxframes)
             for (; column < 48; ++column) {
                 // (4, 8, 12, 16, 20, 24) * 4
                 if (ipixels <= rpixels) [[unlikely]] {
-                    #ifdef TIMED_COMMIT
                     commit_pal = false;
-                    #endif
                     ipixels += i8080cpu::i8080_instruction(); // divisible by 4
-                    #ifdef TIMED_COMMIT
                     if (commit_pal) commit_palette(border_index);
                     if (commit_io && --commit_io == 0) {
                         io->commit();
                     }
-                    #endif
                 }
-                #ifndef TIMED_COMMIT
-                color_index = border_index;
-                #endif
                 rpixels += 4;
             }
 
@@ -596,6 +525,7 @@ rowend:
             }
 
             if (--line6 == 0) {
+                // -- all sound i/o and generation update --
                 // ay line update
                 {
                     size_t bufpos = (esp_filler::rpixels - esp_filler::frame_rpixels) / 96;
@@ -611,13 +541,12 @@ rowend:
                 esp_filler::vi53->tapein = esp_filler::tape_player->sample();
 
                 // vi53 line update
-                #ifdef VI53_GENSOUND
                 {
                     vi53->gen_sound((rpixels - last_rpixels) >> 1);
                     //printf("vi53_gen: %d clocks, nsamps=%d\n", (rpixels - last_rpixels) >> 1, vi53->audio_buf - audio::audio_pp[audiobuf_index]);
                     last_rpixels = rpixels;
                 }
-                #endif
+                // -- all sound i/o and generation update --
 
                 write_buffer ^= 1;
                 bmp.bmp8 = buffers[write_buffer];
@@ -630,13 +559,6 @@ rowend:
                     } while (line == first_visible_line + 6 - 1 && pos_px != 0);
                 }
             }
-
-            #ifndef VI53_GENSOUND
-            // update passed vi53 counts and save last_rpixels, last_rpixels can also be updated in io_output
-            vi53->count_clocks((rpixels - last_rpixels) >> 1); // 96 timer clocks per line
-            last_rpixels = rpixels;
-            *vi53->audio_buf++ = vi53->out_sum() << AUDIO_SCALE_8253;   // sample audio
-            #endif
         }
         keyboard::io_commit_ruslat();
         keyboard::io_read_modkeys(); 

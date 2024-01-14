@@ -30,8 +30,6 @@
 
 #define VI53_CLOCKS_PER_SAMPLE  48  // 1.5MHz clocks per output sample
 
-#define VI53_GENSOUND 1
-
 #define I2S_DOUT      17
 #define I2S_BCLK      0     // was 19 in some revisions of the board
 #define I2S_LRC       18
