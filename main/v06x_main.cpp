@@ -30,13 +30,14 @@ extern SDCard sdcard;
 namespace v06x 
 {
 
+IO * io;
+
 static Memory * memory;
 static QueueHandle_t que_scaler_to_emu;
 static uint8_t * buf0;
 static uint8_t * buf1;
 
 static void v06x_task(void *param);
-
 
 void load_blob(void);
 void rom_blob_loaded(Board * board);
@@ -142,7 +143,7 @@ void v06x_task(void *param)
     AySound::set_stereo(AYEMU_MONO, NULL);
     AySound::reset();
 
-    IO* io = new IO(*memory, *timer, *fdc, *tape_player);
+    io = new IO(*memory, *timer, *fdc, *tape_player);
     Board* board = new Board(*memory, *io, *tape_player);
     ESP_LOGI(TAG, "Board: %p", board);
     assert(board);

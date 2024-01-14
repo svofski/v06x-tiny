@@ -63,8 +63,11 @@ private:
     int16_t counted_carry;
     int16_t accu_carry;
 
+
 public:
     audio_sample_t * audio_buf; // pointer to external sound buf
+    uint8_t beeper;
+    uint8_t covox;
 public:
     I8253();
     void write_cw(uint8_t w8);

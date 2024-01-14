@@ -88,10 +88,6 @@ void app_main(void)
     v06x::init(scaler_to_emu, scaler::bounce_buf8[0], scaler::bounce_buf8[1]);
     v06x::create_pinned_to_core();
 
-
-    //// this will also scan the directories for all usable assets
-    //sdcard.create_pinned_to_core();
-
     osd.init(268, 240); // scandoubled osd
     osd.x = 532;
     osd.y = 0;
@@ -134,6 +130,17 @@ void app_main(void)
         if (xQueueReceive(sdcard.osd_notify_queue, &loaded, 0)) {
             if (loaded > 0) {
                 v06x::blob_loaded(); // blob loaded, pass it on to memory
+            }
+            else {
+                switch(loaded) {
+                    case NOTIFY_SDCARD_MOUNTED:
+                        printf("sdcard please rescan\n");
+                        sdcard.rescan_sdcard();
+                        break;
+                    case NOTIFY_RESCAN_COMPLETE:
+                        printf("sdcard rescan complete\n");
+                        break;
+                }
             }
         }
 

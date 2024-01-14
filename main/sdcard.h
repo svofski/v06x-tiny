@@ -140,6 +140,13 @@ struct AssetStorage
 enum {
     SD_GET_FILESIZE,
     SD_LOAD_FILE,
+    SD_RESCAN_SDCARD,
+};
+
+// second param
+enum {
+    NOTIFY_SDCARD_MOUNTED = -1,
+    NOTIFY_RESCAN_COMPLETE = -2,
 };
 
 struct SDRequest
@@ -255,6 +262,9 @@ public:
             return;
         }
 
+        // bypass v06x keyboard scan so that it doesn't block waiting
+        keyboard::osd_takeover(true);
+
         std::string root {MOUNT_POINT_SD "/vector06"};
         
         static std::vector<std::string> dirs;
@@ -311,6 +321,9 @@ public:
             closedir(dir);
         }
 
+        // release the bus (emulator can scan the keyboard again)
+        keyboard::osd_takeover(false);
+
         for (auto kind = 0; kind < storage.files.size(); ++kind) {
             std::sort(storage.files[kind].begin(), storage.files[kind].end(), 
                 [](const FileInfo& a, const FileInfo& b) {
@@ -338,8 +351,8 @@ public:
         while (!self->mount()) {
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
-
-        self->rescan_storage();
+        int mounted_result = NOTIFY_SDCARD_MOUNTED;
+        xQueueSend(self->osd_notify_queue, &mounted_result, 0);
 
         while (true) {
             SDRequest r;
@@ -367,8 +380,24 @@ public:
                         }
                     }
                     break;
+                case SD_RESCAN_SDCARD:
+                    {
+                        self->rescan_storage();
+                        int result = NOTIFY_RESCAN_COMPLETE;
+                        xQueueSend(self->osd_notify_queue, &result, 0);
+                    }
+                    break;
             }
         }
+    }
+
+    void rescan_sdcard()
+    {
+        SDRequest r;
+        r.request = SD_RESCAN_SDCARD;
+        r.param1 = 0;
+        r.param2 = 0;
+        xQueueSend(request_queue, &r, portMAX_DELAY);
     }
 
     void request_filesize(AssetKind kind, int index)

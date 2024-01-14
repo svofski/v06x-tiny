@@ -702,6 +702,9 @@ void i8080_hal_io_output(int port, int value)
 {
     //if (port < 16) printf("output port %02x=%02x\n", port, value);
     esp_filler::io->output(port, value);
+
+    #if 0
+
     #ifndef TIMED_COMMIT    
     esp_filler::io->commit_palette(0x0f & esp_filler::color_index);
     #else
@@ -738,7 +741,44 @@ void i8080_hal_io_output(int port, int value)
         esp_filler::commit_io = 2;          // border updates with delay
     }
     #endif
-    //esp_filler::io->commit();
+
+    #else
+
+
+    switch (port) {
+        case 0x02:
+            esp_filler::commit_io = 2; // border updates with delay
+            break;
+            // timer ports, also beeper
+        case 0x00 ... 0x01: // because tape out
+        case 0x08 ... 0x0b:
+            esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
+            esp_filler::last_rpixels = esp_filler::rpixels;
+            esp_filler::io->commit();
+            esp_filler::vi53->beeper = esp_filler::io->TapeOut();
+            esp_filler::vi53->covox = esp_filler::io->Covox(); // covox is uncounted for now, port 0x7/PA2
+            break;
+        case 0x0c ... 0x0f:
+            esp_filler::commit_pal = true;      // near-instant
+            esp_filler::palette_byte = value;
+            break;
+        case 0x14:
+            {
+            // generate ay sound up to current position
+            size_t bufpos = (esp_filler::rpixels - esp_filler::frame_rpixels) / 96;
+            if (bufpos > esp_filler::ay_bufpos) {
+                AySound::gen_sound(bufpos - esp_filler::ay_bufpos, esp_filler::ay_bufpos);
+                esp_filler::ay_bufpos = bufpos;
+            }
+            esp_filler::io->commit();           // all regular peripherals
+            }
+            break;
+        default:
+            esp_filler::io->commit();
+            break;
+    }
+
+    #endif
 }
 
 IRAM_ATTR

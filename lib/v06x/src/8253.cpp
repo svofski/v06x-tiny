@@ -298,6 +298,8 @@ I8253::I8253() : control_word(0)
 {
     this->counted_carry = 0;
     this->accu_carry = 0;
+    this->beeper = 0;
+    this->covox = 0;
 }
 
 void I8253::write_cw(uint8_t w8) 
@@ -380,7 +382,8 @@ void I8253::gen_sound(int nclocks)
         counted += count;
         remaining -= count;
         if (count + count_rem == mul) {
-            accu += counters[0].out + counters[1].out + counters[2].out;
+            accu += counters[0].out + counters[1].out + counters[2].out + beeper;
+            // add tape out here i guess?
         }
         count_rem = 0;  // forget remainder
         if (counted >= VI53_CLOCKS_PER_SAMPLE) {
