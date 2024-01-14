@@ -50,13 +50,9 @@ first visible line:     10v switch on buffer writes
                             ...
 */
 
-constexpr int raster_hstart = center_offset;
-constexpr int raster_hend = screen_width + center_offset;
+Memory * memory;        // main memory
 
-
-const uint32_t * mem32;
-uint32_t pixel32;
-uint32_t pixel32_grouped;
+const uint32_t * mem32;     // screen memory
 
 union {
     uint8_t * bmp8;          // current write buffer
@@ -65,31 +61,25 @@ union {
 } bmp;
 
 uint8_t * buffers[2];   // bounce buffers 0/1
-int write_buffer;
+int write_buffer;       // number of write bounce buffer
 
-int inte;
-int irq;
-int irq_clk;
-int raster_pixel;   // hard PAL raster pixel (768 per 1/15625s line)
-int raster_line;    // hard PAL raster line (312)
-int fb_column;
-int fb_row;
-int vborder;
-int visible;
-int mode512;
-volatile int border_index;
-int fiveline_count;
+int inte;               // INTE line
+int irq;                // IRQ (should be made local)
+int fb_column;          // framebuffer column counter
+int fb_row;             // framebuffer row counter
+int mode512;            // 512-pixel mode flag
+volatile int border_index;  // border color index
 
-bool commit_pal;
-int commit_io;
-uint8_t palette_byte;
+bool commit_pal;        // commit_palette() palette should be called in due time
+uint8_t palette_byte;   // color value to be written by commit_palette() (out 0x0c value)
+int commit_io;          // io->commit() should be called in due time
 
 volatile int v06x_framecount = 0;
 volatile int v06x_frame_cycles = 0;
 
 volatile int usrus_holdframes = 0;
 
-std::function<void(ResetMode)> onreset;
+//std::function<void(ResetMode)> onreset;
 std::function<void(void)> onosd;
 
 IO * io;
@@ -154,8 +144,10 @@ void commit_palette(int index)
     //printf("[%02x]=%02x ", index, palette_byte);
 }
 
-void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _vi53, WavPlayer * _tape_player)
+void init(Memory * _memory, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _vi53, WavPlayer * _tape_player)
 {
+    memory = _memory;
+    auto _mem32 = reinterpret_cast<uint32_t *>(memory->buffer());
     mem32 = &_mem32[0x2000]; // pre-offset 
     io = _io;
     buffers[0] = buf1;
@@ -164,7 +156,6 @@ void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _
     tape_player = _tape_player;
     write_buffer = 0;    
     bmp.bmp8 = buffers[0];
-    fiveline_count = 0;        // count groups of 5 lines
 
     audiobuf_index = 0;
     vi53->audio_buf = audio::audio_pp[audiobuf_index];
@@ -188,11 +179,8 @@ void frame_start()
     // advanceLine(), don't do that here.
     //this->raster_pixel = 0;   // horizontal pixel counter
 
-    raster_line = 0;    // raster line counter
     fb_column = 0;      // frame buffer column
     fb_row = 0;         // frame buffer row
-    vborder = true;     // vertical border flag
-    visible = false;    // visible area flag
     irq = false;
 }
 
@@ -327,10 +315,11 @@ void borderslab()
     *bmp.bmp32++ = c << 16 | c;
 }
 
-int rpixels;
-int last_rpixels;
-int frame_rpixels;
-int ay_bufpos, ay_bufpos_reg;
+// these variables are used by the i8080 i/o callbacks
+int rpixels;                        // raster pixels count
+int last_rpixels;                   // previous count
+int frame_rpixels;                  // rpixels at the beginning of the current frame
+int ay_bufpos, ay_bufpos_reg;       // ay buffer position
 
 IRAM_ATTR
 int bob(int maxframes)
@@ -575,10 +564,11 @@ rowend:
 
         {
             int nsamps = vi53->audio_buf - audio::audio_pp[audiobuf_index];
-            if (nsamps != 312 * 2) {
-                printf("WTF: vi53_gen: nsamps=%d\n", nsamps);
-            }
+            //if (nsamps != 312 * 2) {
+            //    printf("WTF: vi53_gen: nsamps=%d\n", nsamps);
+            //}
         }
+
         //if (frm >= 200 && frm <= 203) {
         //    for (int i = 0; i < 624; ++i) {
         //        printf("%8d", audio::audio_pp[audiobuf_index][i]);
@@ -602,10 +592,10 @@ rowend:
         }
 
         if (keyboard::sbros_pressed()) {
-            onreset(ResetMode::BLKSBR);
+            reset(ResetMode::BLKSBR);
         }
         else if (keyboard::vvod_pressed()) {
-            onreset(ResetMode::BLKVVOD);
+            reset(ResetMode::BLKVVOD);
         }
 
         v06x_framecount = v06x_framecount + 1;
@@ -615,8 +605,78 @@ rowend:
     return maxframes;
 }
 
+
+// formerly Board
+
+extern "C" unsigned char* boots_bin;
+extern "C" unsigned int boots_bin_len;
+
+std::vector<uint8_t> boot;
+
+void init_bootrom(const uint8_t* src, size_t size)
+{
+    std::vector<uint8_t> userboot = util::load_binfile(Options.bootromfile);
+    if (userboot.size() > 0) {
+        printf("User bootrom: %s (%u bytes)\n", Options.bootromfile.c_str(),
+          userboot.size());
+        boot = userboot;
+    } 
+    else {
+        boot.resize(size);
+        for (unsigned i = 0; i < size; ++i) {
+            boot[i] = src[i];
+        }
+        printf("init_bootrom: size=%u\n", boot.size());
+    }
 }
 
+void enable_interrupt(bool on)
+{
+    esp_filler::irq &= on;
+    esp_filler::inte = on;
+}
+
+void reset(ResetMode mode)
+{
+    switch (mode) {
+        case ResetMode::BLKVVOD:
+            if (boot.size() == 0) {
+                init_bootrom((const uint8_t*)&boots_bin, (size_t)boots_bin_len);
+            }
+            memory->attach_boot(boot);
+            printf("reset() attached boot, size=%u\n", (unsigned int)boot.size());
+            break;
+        case ResetMode::BLKSBR:
+            memory->detach_boot();
+            printf("reset() detached boot\n");
+            break;
+        case ResetMode::LOADROM:
+            memory->detach_boot();
+            i8080cpu::i8080_jump(Options.pc);
+            i8080cpu::i8080_setreg_sp(0xc300);
+            printf("reset() detached boot, pc=%04x sp=%04x\n", i8080cpu::i8080_pc(), i8080cpu::i8080_regs_sp());
+            break;
+    }
+
+    enable_interrupt(false);
+    i8080cpu::last_opcode = 0;
+    //total_v_cycles = 0;
+    i8080cpu::i8080_init();
+}
+
+void set_bootrom(const std::vector<uint8_t>& bootbytes)
+{
+    printf("Board::set_bootrom bootbytes.size()=%u\n", bootbytes.size());
+    boot = bootbytes;
+    printf("Board::set_bootrom boot.size()=%u\n", boot.size());
+}
+
+
+}
+
+//
+// i8080_hal
+//
 
 // as per v06x:
 //   port 2 commit time: 8 * 4 (32 pixels)
@@ -741,4 +801,30 @@ void i8080_hal_iff(int on)
     esp_filler::inte = on;
 }
 
+IRAM_ATTR
+int i8080_hal_memory_read_byte(int addr, const bool _is_opcode)
+{
+    return esp_filler::memory->read(addr, false, _is_opcode);
+}
+
+IRAM_ATTR
+void i8080_hal_memory_write_byte(int addr, int value)
+{
+    return esp_filler::memory->write(addr, value, false);
+}
+
+IRAM_ATTR
+int i8080_hal_memory_read_word(int addr, bool stack)
+{
+    uint16_t tmp = (esp_filler::memory->read(addr + 1, stack) << 8);
+    tmp |= esp_filler::memory->read(addr, stack);
+    return tmp;
+}
+
+IRAM_ATTR
+void i8080_hal_memory_write_word(int addr, int word, bool stack)
+{
+    esp_filler::memory->write(addr, word & 0377, stack);
+    esp_filler::memory->write(addr + 1, word >> 8, stack);
+}
 

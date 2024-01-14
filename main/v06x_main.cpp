@@ -11,7 +11,6 @@
 #include "memory.h"
 #include "fd1793.h"
 #include "vio.h"
-#include "board.h"
 #include "options.h"
 #include "keyboard.h"
 #include "8253.h"
@@ -38,10 +37,12 @@ static QueueHandle_t que_scaler_to_emu;
 static uint8_t * buf0;
 static uint8_t * buf1;
 
+std::unique_ptr<DiskImage> blob_dsk;
+
 static void v06x_task(void *param);
 
 void load_blob(void);
-void rom_blob_loaded(Board * board);
+void rom_blob_loaded();
 void fdd_loaded(int disk, FD1793 * fdc);
 
 void init(QueueHandle_t from_scaler, uint8_t * _buf0, uint8_t * _buf1)
@@ -56,7 +57,7 @@ void create_pinned_to_core()
     xTaskCreatePinnedToCore(&v06x_task, "v06x", 1024*6, NULL, EMU_PRIORITY, NULL, EMU_CORE);
 }
 
-void benchmark_bob(Board * board)
+void benchmark_bob()
 {
     const unsigned MEASUREMENTS = 50;
     uint64_t start = esp_timer_get_time();
@@ -145,31 +146,34 @@ void v06x_task(void *param)
     AySound::reset();
 
     io = new IO(*memory, *timer, *fdc, *tape_player);
-    Board* board = new Board(*memory, *io, *tape_player);
-    ESP_LOGI(TAG, "Board: %p", board);
-    assert(board);
+    //Board* board = new Board(*memory, *io, *tape_player);
+    //ESP_LOGI(TAG, "Board: %p", board);
+    //assert(board);
 
-    esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer, tape_player);
-    esp_filler::onreset = [board](ResetMode blkvvod) {
-        board->reset(blkvvod);
-    };
+    //esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer, tape_player);
+    esp_filler::init(memory, io, buf0, buf1, timer, tape_player);
+
+    //esp_filler::onreset = [board](ResetMode blkvvod) {
+    //    board->reset(blkvvod);
+    //};
     esp_filler::frame_start();    
 
-    board->init();
+    //board->init();
     fdc->init();
+
     if (Options.autostart) {
         int seq = 0;
-        io->onruslat = [&seq,board](bool ruslat) {
+        io->onruslat = [&seq](bool ruslat) {
             seq = (seq << 1) | (ruslat ? 1 : 0);
             if ((seq & 15) == 6) {
-                board->reset(ResetMode::BLKSBR);
+                esp_filler::reset(ResetMode::BLKSBR);
                 io->onruslat = nullptr;
             }
         };
     }
-    ESP_LOGI(TAG, "Board: %p", board);
+    //ESP_LOGI(TAG, "Board: %p", board);
 
-    board->reset(ResetMode::BLKVVOD);
+    esp_filler::reset(ResetMode::BLKVVOD);
 
     // benchmark_bob(board);
     //benchmark_vi53(timer);
@@ -269,7 +273,7 @@ void v06x_task(void *param)
             case AK_ROM:
                 AySound::reset();
                 timer->reset();
-                rom_blob_loaded(board);
+                rom_blob_loaded();
                 break;
             case AK_FDD:
                 fdd_loaded(0, fdc);
@@ -283,9 +287,8 @@ void v06x_task(void *param)
     }
 }
 
-std::unique_ptr<DiskImage> blob_dsk;
-
 // called from low priority task on sdcard.osd_notify_queue
+// sdcard file is loaded and data is ready to be used
 void blob_loaded()
 {
     auto &bytes = reinterpret_cast<std::vector<uint8_t> &>(sdcard.blob.bytes); // erase allocator
@@ -316,14 +319,14 @@ void blob_loaded()
 }
 
 // called from main emulator loop, should be as fast as possible
-void rom_blob_loaded(Board * board)
+void rom_blob_loaded()
 {
-    board->reset(ResetMode::BLKVVOD);
+    esp_filler::reset(ResetMode::BLKVVOD);
     esp_filler::bob(50);
     for (size_t i = 0; i < sdcard.blob.bytes.size(); ++i) {
         memory->write(256 + i, sdcard.blob.bytes[i], false);
     }
-    board->reset(ResetMode::BLKSBR);
+    esp_filler::reset(ResetMode::BLKSBR);
     printf("loaded rom %d\n", sdcard.blob.bytes.size());
 }
 

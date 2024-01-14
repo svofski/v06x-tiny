@@ -1,4 +1,5 @@
 #include <cstdint>
+#include "memory.h"
 #include "vio.h"
 #include "8253.h"
 #include "globaldefs.h"
@@ -21,11 +22,10 @@ namespace esp_filler {
     extern volatile int v06x_framecount;
     extern volatile int v06x_frame_cycles;
 
-    extern std::function<void(ResetMode)> onreset;
     extern std::function<void(void)> onosd;
 
-    //uint16_t * palette8();    
-    void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * vi53, WavPlayer * tape_player);
+    //void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * vi53, WavPlayer * tape_player);
+    void init(Memory * memory, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * vi53, WavPlayer * tape_player);
     void frame_start();
     int fill(int ncycles, int commit_time, int commit_time_pal);
     int fill_noout(int ncycles);
@@ -35,4 +35,5 @@ namespace esp_filler {
     void write_pal(uint8_t adr8, uint8_t rgb);
 
     int bob(int maxframes);
+    void reset(ResetMode mode);
 }
