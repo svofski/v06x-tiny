@@ -67,6 +67,7 @@ private:
 public:
     audio_sample_t * audio_buf; // pointer to external sound buf
     uint8_t beeper;
+    uint8_t tapein;
     uint8_t covox;
 public:
     I8253();

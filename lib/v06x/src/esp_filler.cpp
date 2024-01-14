@@ -101,6 +101,7 @@ std::function<void(void)> onosd;
 
 IO * io;
 I8253 * vi53;
+WavPlayer * tape_player;
 
 // palette ram
 // index:4 -> {rgb,rgb}
@@ -160,13 +161,14 @@ void commit_palette(int index)
     //printf("[%02x]=%02x ", index, palette_byte);
 }
 
-void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _vi53)
+void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _vi53, WavPlayer * _tape_player)
 {
     mem32 = &_mem32[0x2000]; // pre-offset 
     io = _io;
     buffers[0] = buf1;
     buffers[1] = buf2;
     vi53 = _vi53;
+    tape_player = _tape_player;
     write_buffer = 0;    
     bmp.bmp8 = buffers[0];
     fiveline_count = 0;        // count groups of 5 lines
@@ -603,6 +605,11 @@ rowend:
                         esp_filler::ay_bufpos = bufpos;
                     }
                 }
+
+                // tape player update
+                esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
+                esp_filler::vi53->tapein = esp_filler::tape_player->sample();
+
                 // vi53 line update
                 #ifdef VI53_GENSOUND
                 {
@@ -750,8 +757,11 @@ void i8080_hal_io_output(int port, int value)
             esp_filler::commit_io = 2; // border updates with delay
             break;
             // timer ports, also beeper
-        case 0x00 ... 0x01: // because tape out
+        case 0x00 ... 0x01: // because tape out and tape in
         case 0x08 ... 0x0b:
+            esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
+            esp_filler::vi53->tapein = esp_filler::tape_player->sample();
+
             esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
             esp_filler::last_rpixels = esp_filler::rpixels;
             esp_filler::io->commit();
@@ -784,10 +794,21 @@ void i8080_hal_io_output(int port, int value)
 IRAM_ATTR
 int i8080_hal_io_input(int port)
 {
-    if (port >= 0x08 and port <= 0x0b) {
-        esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1);
-        esp_filler::last_rpixels = esp_filler::rpixels;
+    switch(port) {
+        case 0x01:              // tape
+        case 0x08 ... 0x0b:     // timer
+            // tape player, count samples similar to timer
+            esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
+            esp_filler::vi53->tapein = esp_filler::tape_player->sample();
+
+            esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1);
+            esp_filler::last_rpixels = esp_filler::rpixels;     // everything depending on rpixels must advance synchronously together
+            break;
+
+        default:
+            break;
     }
+
     int value = esp_filler::io->input(port);
     //printf("input port %02x = %02x\n", port, value);
     return value;

@@ -250,7 +250,7 @@ public:
                     this->init();
                 }
                 this->frac += instruction_time;
-                if (this->frac > this->ratio) {
+                while (this->frac > this->ratio) {
                     this->frac -= this->ratio;
                     ++this->playhead;
                 }

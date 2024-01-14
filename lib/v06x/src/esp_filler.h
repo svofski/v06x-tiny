@@ -25,7 +25,7 @@ namespace esp_filler {
     extern std::function<void(void)> onosd;
 
     //uint16_t * palette8();    
-    void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * vi53);
+    void init(uint32_t * _mem32, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * vi53, WavPlayer * tape_player);
     void frame_start();
     int fill(int ncycles, int commit_time, int commit_time_pal);
     int fill_noout(int ncycles);

@@ -31,6 +31,7 @@ namespace v06x
 {
 
 IO * io;
+Wav * wav;
 
 static Memory * memory;
 static QueueHandle_t que_scaler_to_emu;
@@ -111,8 +112,8 @@ void v06x_task(void *param)
     FD1793 * fdc = new FD1793();
     ESP_LOGI(TAG, "FDC: %p", fdc);
 
-    Wav* wav = new Wav();
-    WavPlayer* tape_player = new WavPlayer(*wav);
+    wav = new Wav();
+    WavPlayer * tape_player = new WavPlayer(*wav);
     I8253* timer = new I8253();
     
     //// SPI keyboard
@@ -148,7 +149,7 @@ void v06x_task(void *param)
     ESP_LOGI(TAG, "Board: %p", board);
     assert(board);
 
-    esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer);
+    esp_filler::init(reinterpret_cast<uint32_t *>(memory->buffer()), io, buf0, buf1, timer, tape_player);
     esp_filler::onreset = [board](ResetMode blkvvod) {
         board->reset(blkvvod);
     };
@@ -158,7 +159,7 @@ void v06x_task(void *param)
     fdc->init();
     if (Options.autostart) {
         int seq = 0;
-        io->onruslat = [&seq,board,io](bool ruslat) {
+        io->onruslat = [&seq,board](bool ruslat) {
             seq = (seq << 1) | (ruslat ? 1 : 0);
             if ((seq & 15) == 6) {
                 board->reset(ResetMode::BLKSBR);
@@ -273,6 +274,9 @@ void v06x_task(void *param)
             case AK_FDD:
                 fdd_loaded(0, fdc);
                 break;
+            case AK_WAV:
+                // there's nothing special to do
+                break;
             default:
                 break;
         }
@@ -281,15 +285,37 @@ void v06x_task(void *param)
 
 std::unique_ptr<DiskImage> blob_dsk;
 
+// called from low priority task on sdcard.osd_notify_queue
 void blob_loaded()
 {
-    auto & bytes = reinterpret_cast<std::vector<uint8_t>&>(sdcard.blob.bytes); // erase allocator
-    blob_dsk = make_unique<DetachedDiskImage>(bytes);
+    auto &bytes = reinterpret_cast<std::vector<uint8_t> &>(sdcard.blob.bytes); // erase allocator
+
+    switch (sdcard.blob.kind) {
+        case AK_FDD:
+            printf("blob_loaded: fdd (%d bytes)\n", bytes.size());
+            blob_dsk = make_unique<DetachedDiskImage>(bytes);
+            break;
+        case AK_WAV:
+            // this will also rewind the player
+            printf("blob_loaded: wav (%d bytes)\n", bytes.size());
+            wav->set_bytes(bytes);
+            break;
+        case AK_ROM:
+            printf("blob_loaded: rom (%d bytes)\n", bytes.size());
+            break;
+        case AK_BAS:
+            printf("blob_loaded: bas (%d bytes)\n", bytes.size());
+            break;
+        default:
+            printf("blob_loaded: unknown %d (%d bytes)\n", sdcard.blob.kind, bytes.size());
+            break;
+    }
 
     int cmd = CMD_EMU_BREAK;
     xQueueSend(::emu_command_queue, &cmd, portMAX_DELAY);
 }
 
+// called from main emulator loop, should be as fast as possible
 void rom_blob_loaded(Board * board)
 {
     board->reset(ResetMode::BLKVVOD);
@@ -301,6 +327,7 @@ void rom_blob_loaded(Board * board)
     printf("loaded rom %d\n", sdcard.blob.bytes.size());
 }
 
+// called from main emulator loop, should be as fast as possible
 void fdd_loaded(int disk, FD1793 * fdc)
 {
     fdc->disk(disk).attach(std::move(blob_dsk));
@@ -313,6 +340,10 @@ void fdd_loaded(int disk, FD1793 * fdc)
     }
     printf("\n");
     #endif
+}
+
+void wav_loaded()
+{
 }
 
 }
