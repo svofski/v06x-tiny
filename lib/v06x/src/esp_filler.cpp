@@ -141,7 +141,6 @@ void commit_palette(int index)
 {
     esp_filler::write_pal(index, palette_byte);
     modechange();
-    //printf("[%02x]=%02x ", index, palette_byte);
 }
 
 void init(Memory * _memory, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _vi53, WavPlayer * _tape_player)
@@ -321,6 +320,31 @@ int last_rpixels;                   // previous count
 int frame_rpixels;                  // rpixels at the beginning of the current frame
 int ay_bufpos, ay_bufpos_reg;       // ay buffer position
 
+// generate ay sound up to current position
+inline void gensound_ay()
+{
+    size_t bufpos = (esp_filler::rpixels - esp_filler::frame_rpixels) / 96;
+    if (bufpos > esp_filler::ay_bufpos) {
+        AySound::gen_sound(bufpos - esp_filler::ay_bufpos, esp_filler::ay_bufpos);
+        esp_filler::ay_bufpos = bufpos;
+    }
+}
+
+// all native sound generators: vi53, beeper, tape out and in
+inline void gensound_vi53()
+{
+    // tape player update, like timer
+
+    // this sounds pretty bad because we update tape in large chunks
+    // to make tape-in sound pretty vi53->gen_sound() should call tape_player->advance() instead
+    esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
+    esp_filler::vi53->tapein = esp_filler::tape_player->sample();
+
+    // vi53 and beeper update
+    vi53->gen_sound((rpixels - last_rpixels) >> 1);
+    last_rpixels = rpixels;
+}
+
 IRAM_ATTR
 int bob(int maxframes)
 {
@@ -350,11 +374,8 @@ int bob(int maxframes)
     rpixels = last_rpixels = frame_rpixels = 0;
     int ipixels = rpixels; 
 
-    ///int commit_time = 0, commit_time_pal = 0;
-    int line6 = 0;
+    int line6 = 0;          // everything is computed in 6-line chunks that fill up scaler input buffer
     ay_bufpos_reg = 0;
-
-    //printf("buffers[0]=%p buffers[0].10=%p  buffers[1]=%p buffers[0].10=%p\n", buffers[0], buffers[0]+10, buffers[1], buffers[1]+10);
 
     for(int frm = 0; maxframes == 0 || frm < maxframes; ++frm) {
         write_buffer = 0;
@@ -374,8 +395,8 @@ int bob(int maxframes)
         for (int line = 0; line < 312; ++line) {
             int column;
             bool line_is_visible = line >= first_visible_line && line <= last_visible_line;
-            // invisible 
             if (!line_is_visible) {
+                // invisible 
                 for (column = 0; column < 48; ++column) {
                     if (line == 0 && column == 9) {
                         irq = inte;
@@ -405,12 +426,6 @@ int bob(int maxframes)
                 goto rowend;
             }
 
-            // if (line == first_visible_line) {
-            //     if (frm == 150) {
-            //         i8080cpu::trace_enable = 1;
-            //     }
-            // }
-
             // visible but no raster, vertical border
             if (line < first_raster_line || line >= last_raster_line) {  
                 for (column = 0; column < 48; ++column) {
@@ -419,7 +434,6 @@ int bob(int maxframes)
                     #endif
                     if (ipixels <= rpixels) [[unlikely]] {
                         commit_pal = false;
-                        //if (i8080cpu::trace_enable) printf("c=%d rpixel=%d ", column, rpixels - rpixel0);
                         ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                         #if DEBUG_INSTRUCTION_STRIPES
                         xoxo = true;
@@ -450,7 +464,6 @@ int bob(int maxframes)
                 goto rowend;
             }
 
-            //i8080cpu::trace_enable = 0;
             // line counted in 16-pixel columns (8 6mhz pixel columns, one v06c byte)
             /// COLUMNS 0..9
             for (column = 0; column < 10; ++column) {
@@ -476,7 +489,6 @@ int bob(int maxframes)
                     ipixels += i8080cpu::i8080_instruction(); // divisible by 4
                 }
 
-                //?color_index = border_index; // important for commit palette
                 ++fb_column;
                 slab8_pal();
                 rpixels += 4;
@@ -487,7 +499,6 @@ int bob(int maxframes)
                 commit_pal = false;
                 ipixels += i8080cpu::i8080_instruction(); // divisible by 4
             }
-            //?color_index = border_index;
             rpixels += 4;
             borderslab();
             ++column;
@@ -516,25 +527,8 @@ rowend:
             if (--line6 == 0) {
                 // -- all sound i/o and generation update --
                 // ay line update
-                {
-                    size_t bufpos = (esp_filler::rpixels - esp_filler::frame_rpixels) / 96;
-                    if (bufpos > esp_filler::ay_bufpos) {
-                        //printf("gen-c: bufpos=%d aypos=%d cnt=%d!\n", bufpos, esp_filler::ay_bufpos, bufpos - esp_filler::ay_bufpos);
-                        AySound::gen_sound(bufpos - esp_filler::ay_bufpos, esp_filler::ay_bufpos);
-                        esp_filler::ay_bufpos = bufpos;
-                    }
-                }
-
-                // tape player update
-                esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
-                esp_filler::vi53->tapein = esp_filler::tape_player->sample();
-
-                // vi53 line update
-                {
-                    vi53->gen_sound((rpixels - last_rpixels) >> 1);
-                    //printf("vi53_gen: %d clocks, nsamps=%d\n", (rpixels - last_rpixels) >> 1, vi53->audio_buf - audio::audio_pp[audiobuf_index]);
-                    last_rpixels = rpixels;
-                }
+                gensound_ay();
+                gensound_vi53();
                 // -- all sound i/o and generation update --
 
                 write_buffer ^= 1;
@@ -552,7 +546,8 @@ rowend:
         keyboard::io_commit_ruslat();
         keyboard::io_read_modkeys(); 
 
-        if ((keyboard::state.pc & keyboard::PC_MODKEYS_MASK) == ((keyboard::PC_BIT_US | keyboard::PC_BIT_RUSLAT) ^ keyboard::PC_MODKEYS_MASK)) {
+        if ((keyboard::state.pc & keyboard::PC_MODKEYS_MASK) == ((keyboard::PC_BIT_US | keyboard::PC_BIT_RUSLAT) ^ keyboard::PC_MODKEYS_MASK)
+            || (keyboard::state.pc & keyboard::PC_MODKEYS_MASK) == ((keyboard::PC_BIT_SS | keyboard::PC_BIT_RUSLAT) ^ keyboard::PC_MODKEYS_MASK)) {
             usrus_holdframes = usrus_holdframes + 1;
             if (usrus_holdframes == OSD_USRUS_FRAMES_HOLD && onosd) {
                 onosd();
@@ -660,7 +655,6 @@ void reset(ResetMode mode)
 
     enable_interrupt(false);
     i8080cpu::last_opcode = 0;
-    //total_v_cycles = 0;
     i8080cpu::i8080_init();
 }
 
@@ -741,11 +735,7 @@ void i8080_hal_io_output(int port, int value)
             // timer ports, also beeper
         case 0x00 ... 0x01: // because tape out and tape in
         case 0x08 ... 0x0b:
-            esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
-            esp_filler::vi53->tapein = esp_filler::tape_player->sample();
-
-            esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
-            esp_filler::last_rpixels = esp_filler::rpixels;
+            esp_filler::gensound_vi53();
             esp_filler::io->commit();
             esp_filler::vi53->beeper = esp_filler::io->TapeOut();
             esp_filler::vi53->covox = esp_filler::io->Covox(); // covox is uncounted for now, port 0x7/PA2
@@ -755,15 +745,8 @@ void i8080_hal_io_output(int port, int value)
             esp_filler::palette_byte = value;
             break;
         case 0x14:
-            {
-            // generate ay sound up to current position
-            size_t bufpos = (esp_filler::rpixels - esp_filler::frame_rpixels) / 96;
-            if (bufpos > esp_filler::ay_bufpos) {
-                AySound::gen_sound(bufpos - esp_filler::ay_bufpos, esp_filler::ay_bufpos);
-                esp_filler::ay_bufpos = bufpos;
-            }
+            esp_filler::gensound_ay();
             esp_filler::io->commit();           // all regular peripherals
-            }
             break;
         default:
             esp_filler::io->commit();
@@ -779,12 +762,7 @@ int i8080_hal_io_input(int port)
     switch(port) {
         case 0x01:              // tape
         case 0x08 ... 0x0b:     // timer
-            // tape player, count samples similar to timer
-            esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
-            esp_filler::vi53->tapein = esp_filler::tape_player->sample();
-
-            esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1);
-            esp_filler::last_rpixels = esp_filler::rpixels;     // everything depending on rpixels must advance synchronously together
+            esp_filler::gensound_vi53();
             break;
 
         default:
