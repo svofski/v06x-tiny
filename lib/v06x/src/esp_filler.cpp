@@ -337,9 +337,12 @@ inline void gensound_vi53()
 
     // this sounds pretty bad because we update tape in large chunks
     // to make tape-in sound pretty vi53->gen_sound() should call tape_player->advance() instead
-    esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
-    esp_filler::vi53->tapein = esp_filler::tape_player->sample();
-
+    //esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
+    //esp_filler::vi53->tapein = esp_filler::tape_player->sample();
+    vi53->count_tape = [](int n) { 
+        esp_filler::tape_player->advance(n);
+        return esp_filler::tape_player->sample();
+    };
     // vi53 and beeper update
     vi53->gen_sound((rpixels - last_rpixels) >> 1);
     last_rpixels = rpixels;

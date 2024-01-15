@@ -69,6 +69,8 @@ public:
     uint8_t beeper;
     uint8_t tapein;
     uint8_t covox;
+
+    std::function<int(int)> count_tape;
 public:
     I8253();
     void write_cw(uint8_t w8);

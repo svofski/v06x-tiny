@@ -154,6 +154,10 @@ void app_main(void)
             }
             else {
                 switch(loaded) {
+                    case NOTIFY_SDCARD_ERROR:
+                        printf("sdcard error, remount\n");
+                        sdcard.remount_sdcard();
+                        break;
                     case NOTIFY_SDCARD_MOUNTED:
                         printf("sdcard please rescan\n");
                         sdcard.rescan_sdcard();

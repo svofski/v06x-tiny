@@ -140,13 +140,15 @@ struct AssetStorage
 enum {
     SD_GET_FILESIZE,
     SD_LOAD_FILE,
-    SD_RESCAN_SDCARD,
+    SD_RESCAN,
+    SD_REMOUNT
 };
 
-// second param
+// special messages
 enum {
-    NOTIFY_SDCARD_MOUNTED = -1,
-    NOTIFY_RESCAN_COMPLETE = -2,
+    NOTIFY_SDCARD_ERROR = -1,
+    NOTIFY_SDCARD_MOUNTED = -2,
+    NOTIFY_RESCAN_COMPLETE = -3,
 };
 
 struct SDRequest
@@ -245,12 +247,10 @@ public:
             #endif
         }
         close(fd);
-
         keyboard::osd_takeover(false);
-
         printf("load_blob: done, %d bytes read\n", result);
-
-        return result;
+        
+        return result; // -1 will correspond to NOTIFY_SDCARD_ERROR
     }
 
     void rescan_storage()
@@ -380,11 +380,21 @@ public:
                         }
                     }
                     break;
-                case SD_RESCAN_SDCARD:
+                case SD_RESCAN:
                     {
                         self->rescan_storage();
                         int result = NOTIFY_RESCAN_COMPLETE;
                         xQueueSend(self->osd_notify_queue, &result, 0);
+                    }
+                    break;
+                case SD_REMOUNT:
+                    {
+                        self->unmount();
+                        while (!self->mount()) {
+                            vTaskDelay(pdMS_TO_TICKS(1000));
+                        }
+                        int mounted_result = NOTIFY_SDCARD_MOUNTED;
+                        xQueueSend(self->osd_notify_queue, &mounted_result, 0);
                     }
                     break;
             }
@@ -394,7 +404,16 @@ public:
     void rescan_sdcard()
     {
         SDRequest r;
-        r.request = SD_RESCAN_SDCARD;
+        r.request = SD_RESCAN;
+        r.param1 = 0;
+        r.param2 = 0;
+        xQueueSend(request_queue, &r, portMAX_DELAY);
+    }
+
+    void remount_sdcard()
+    {
+        SDRequest r;
+        r.request = SD_REMOUNT;
         r.param1 = 0;
         r.param2 = 0;
         xQueueSend(request_queue, &r, portMAX_DELAY);

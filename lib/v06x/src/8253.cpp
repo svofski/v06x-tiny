@@ -381,6 +381,9 @@ void I8253::gen_sound(int nclocks)
         count_clocks(count);
         counted += count;
         remaining -= count;
+        if (count_tape != nullptr) {
+            tapein = count_tape(count << 1);
+        }
         if (count + count_rem == mul) {
             accu += counters[0].out + counters[1].out + counters[2].out + beeper + tapein;
             // add tape out here i guess?
