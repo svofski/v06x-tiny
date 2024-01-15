@@ -83,7 +83,7 @@
 
 #define LCD_NUM_FB 0
 
-#define SDCARD_FREQ_KHZ         20000
+#define SDCARD_FREQ_KHZ         10000
 #define SDCARD_NRETRIES         10
 extern const char * TAG;
 
