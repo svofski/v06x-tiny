@@ -119,6 +119,7 @@ typedef std::array<uint8_t,9> matrix_t;
 
 extern keyboard_state_t state;
 extern keyboard_state_t io_state;
+extern bool osd_enable;
 
 extern matrix_t rows;
 
@@ -131,7 +132,7 @@ void io_commit_ruslat();
 void io_out_ruslat(uint8_t w8);
 
 // when osd takes over keyboard control, block all io_*() calls
-void osd_takeover(bool enable);
+void osd_takeover(bool enable, bool nowait = false);
 void scan_matrix();
 void detect_changes();
 

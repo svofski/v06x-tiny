@@ -46,6 +46,9 @@ bool sdcard_busy = false;
 SDCard sdcard{};
 OSD osd(sdcard);
 
+typedef enum {OSD_NOCHANGE = 0, OSD_SHOW = 1, OSD_HIDE = 2} osd_change_t;
+volatile osd_change_t osd_change = OSD_NOCHANGE;
+
 extern "C"
 void app_main(void)
 {
@@ -69,7 +72,7 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(500));
 
-    audio::create_pinned_to_core();
+    //audio::create_pinned_to_core();   -- hiccups
 
     // initialize spi bus before keyboard and sdcard
     SPIBus spi_bus{};
@@ -87,24 +90,29 @@ void app_main(void)
 
     v06x::init(scaler_to_emu, scaler::bounce_buf8[0], scaler::bounce_buf8[1]);
     v06x::create_pinned_to_core();
+    audio::create_pinned_to_core();     // here it seems to work better -- no hiccups
 
     osd.init(268, 240); // scandoubled osd
     osd.x = 532;
     osd.y = 0;
 
+    osd_change = OSD_NOCHANGE;
+
     // show/hide OSD when US+RUS is pressed for 1s
+    // called from the main emulator task --> delegate to the frame loop
     esp_filler::onosd = []() {
         if (!osd.visible) {
-            osd.show();
+            osd_change = OSD_SHOW;
         }
         else {
-            osd.hide();
+            osd_change = OSD_HIDE;
         }
     };
 
+    // callbacks from osd.show()/hide(), all in this task
     osd.onshown = []() {
         scaler::show_osd(&osd);
-        keyboard::osd_takeover(true);
+        keyboard::osd_takeover(true, true);
     };
     osd.onhidden = []() {
         scaler::show_osd(nullptr);
@@ -122,6 +130,19 @@ void app_main(void)
         xSemaphoreGive(sem_gui_ready);
         xSemaphoreTake(sem_vsync_end, portMAX_DELAY);
         frame_no = frame_no + 1;
+
+        switch (osd_change) {
+            case OSD_SHOW:
+                osd.show();
+                break;
+            case OSD_HIDE:
+                osd.hide();
+                break;
+            default:
+                break;
+        }
+        osd_change = OSD_NOCHANGE;
+
         if (osd.visible) {
             osd.frame(frame_no);
         }

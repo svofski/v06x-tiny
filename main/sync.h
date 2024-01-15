@@ -9,6 +9,7 @@ enum {
 
 extern SemaphoreHandle_t sem_vsync_end;
 extern SemaphoreHandle_t sem_gui_ready;
+extern SemaphoreHandle_t sem_osd_takeover;
 
 // scaler to emulator: request next 6 lines
 extern QueueHandle_t scaler_to_emu;

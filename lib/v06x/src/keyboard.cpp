@@ -2,6 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "i8080.h"
+#include "sync.h"
 
 #define SIMULATE_KEY_PRESS 0
 // keyboard protocol:
@@ -24,6 +25,7 @@ matrix_t rows;
 matrix_t last_rows;
 
 bool osd_enable;
+bool osd_takeover_pls;
 
 static bool transaction_active;
 static spi_device_handle_t spimatrix;
@@ -35,7 +37,7 @@ std::function<void(int,int,bool)> onkeyevent; // scancode, char code, 1 = make, 
 // spi bus must be initialised!
 void init()
 {
-    osd_enable = false;
+    osd_enable = osd_takeover_pls = false;
 
     state.blk = BLK_MASK;
     state.pc = PC_MODKEYS_MASK;
@@ -134,6 +136,8 @@ void read_modkeys()
     //printf("m: %02x %02x\n", transaction.rx_data[0], transaction.rx_data[1]);
     state.pc = transaction.rx_data[0] & PC_MODKEYS_MASK;
     state.blk = transaction.rx_data[0] & BLK_MASK;
+
+    osd_enable = osd_takeover_pls;
 }
 
 bool vvod_pressed()
@@ -182,11 +186,23 @@ void io_commit_ruslat()
 }
 
 // when osd takes over keyboard control, block all io_*() calls
-void osd_takeover(bool enable)
+void osd_takeover(bool enable, bool nowait)
 {
-    while (transaction_active)
-        taskYIELD();
-    osd_enable = enable;
+    // request to enable when possible (between transactions)
+    if (enable) {
+        if (!osd_enable && !nowait) {
+            osd_takeover_pls = enable;
+            while (!osd_enable)
+                taskYIELD();
+        }
+        else {
+            osd_takeover_pls = osd_enable = enable;
+        }
+    }
+    else {
+        osd_takeover_pls = osd_enable = enable;
+    }
+
     io_state.blk = BLK_MASK;
     io_state.pc = PC_MODKEYS_MASK;
     io_state.rows = 0xff;

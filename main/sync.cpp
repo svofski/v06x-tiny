@@ -26,6 +26,7 @@ void create_primitives()
     assert(sem_vsync_end);
     sem_gui_ready = xSemaphoreCreateBinary();
     assert(sem_gui_ready);
+
     scaler_to_emu = xQueueCreate(2, sizeof(int));
     audio_queue = xQueueCreate(AUDIO_NBUFFERS, sizeof(int));
     emu_command_queue = xQueueCreate(1, sizeof(int));
