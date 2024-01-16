@@ -71,8 +71,8 @@ void audio_task(void *unused)
             #endif
             AySound::gen_sound(AUDIO_SAMPLES_PER_FRAME - esp_filler::ay_bufpos_reg, esp_filler::ay_bufpos_reg);
             for (size_t i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
-                audio_pp[num][i] += ay_pp[num][i] << AUDIO_SCALE_MASTER;
-                //audio_copy[i] = /*audio_pp[num][i] +*/ ((audio_sample_t)ay_pp[num][i] << AUDIO_SCALE_MASTER);
+                audio_pp[num][i] += ay_pp[num][i] << AUDIO_SCALE_AY;
+                //audio_copy[i] = /*audio_pp[num][i] +*/ ((audio_sample_t)ay_pp[num][i] << AUDIO_SCALE_AY);
             }
         }
         //i2s_channel_write(tx_handle, audio_copy, AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 5 / portTICK_PERIOD_MS);

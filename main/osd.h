@@ -423,7 +423,7 @@ public:
         gfx.fillRect(0, 0, gfx.xres, gfx.font->charHeight + 4, Colormap::logo_bg);
         gfx.setTextColor(Colormap::logo_text, Colormap::logo_bg);
         gfx.setCursor(4, 2);
-        gfx.print("v06x-mini-esp32 2023 svofski " VERSION_STRING);
+        gfx.print("v06x-mini-esp32 2024 svofski " VERSION_STRING);
         filebox.invalidate();
         assbox.invalidate();
         gfx.show();
