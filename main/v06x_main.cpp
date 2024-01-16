@@ -325,9 +325,12 @@ void rom_blob_loaded()
     esp_filler::bob(50);
     for (size_t i = 0; i < sdcard.blob.bytes.size(); ++i) {
         memory->write(256 + i, sdcard.blob.bytes[i], false);
+        if (((i + 1) & 0x3ff) == 0) {
+            esp_filler::bob(1);
+        }
     }
     esp_filler::reset(ResetMode::BLKSBR);
-    printf("loaded rom %d\n", sdcard.blob.bytes.size());
+    //printf("loaded rom %d\n", sdcard.blob.bytes.size());
 }
 
 // called from main emulator loop, should be as fast as possible
