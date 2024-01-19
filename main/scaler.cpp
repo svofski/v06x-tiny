@@ -506,12 +506,12 @@ copy_osd(uint16_t * bounce16, int lcd_y)
     OSD::Color** osd_srcbuf = osd->framebuffer();
     int osdx = osd->x;
     int osdy_first = osd->y;
-    int osdy_last = osd->y + (osd->height << 1);
+    int osdy_end = osd->y + (osd->height << 1);
     int osd_w = osd->width;
 
     for (int i = 0; i < BOUNCE_NLINES; i += 2) // fill 10 lines, doubling
     {
-        if (lcd_y + i >= osdy_first && lcd_y + i < osdy_last)
+        //if (lcd_y + i >= osdy_first && lcd_y + i < osdy_end)
         {
             // convert 8-bit bgr233 osd buffer to double-scanned native 16-bit rgb565
             uint16_t *dst = bounce16 + i * LCD_H_RES + osdx;
@@ -646,7 +646,7 @@ void create_lcd_driver_task(void *pvParameter)
         .data_width = 16, // RGB565 in parallel mode, thus 16bit in width
         .num_fbs = LCD_NUM_FB,
         .bounce_buffer_size_px = BOUNCE_NLINES * LCD_H_RES,
-        .sram_trans_align = 8,
+        .sram_trans_align = 32,//8,
         .psram_trans_align = 64,
         .hsync_gpio_num = PIN_NUM_HSYNC,
         .vsync_gpio_num = PIN_NUM_VSYNC,

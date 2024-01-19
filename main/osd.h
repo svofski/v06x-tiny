@@ -116,10 +116,16 @@ public:
 
     void ensure_visible(int index)
     {
+        int height_in_rows = bounds.h / row_height;
+
+        if (rows_count < height_in_rows) {
+            scroll_start = 0;
+            return;
+        }
+
         if (index >= first_visible_row(true) && index <= last_visible_row(true)) return;
 
         // want to be in the middle of a page
-        int height_in_rows = bounds.h / row_height;
         scroll_start = std::clamp(index * row_height - (height_in_rows / 2) * row_height, 0, row_height * rows_count - bounds.h);
         invalidate();
     }
@@ -245,7 +251,6 @@ public:
         if (row == filebox.selected) {
             gfx.setTextColor(Colormap::dir_text_selected, Colormap::dir_bg_selected);
         }
-
 
         int vgap = (r.h - char_height) / 2;
         gfx.setCursor(r.x, r.y + vgap);
@@ -419,14 +424,16 @@ public:
 
     void paint_background()
     {
-        gfx.fillRect(0, 0, gfx.xres, gfx.yres, bgcolor);
-        gfx.fillRect(0, 0, gfx.xres, gfx.font->charHeight + 4, Colormap::logo_bg);
-        gfx.setTextColor(Colormap::logo_text, Colormap::logo_bg);
-        gfx.setCursor(4, 2);
-        gfx.print("v06x-mini-esp32 2024 svofski " VERSION_STRING);
-        filebox.invalidate();
-        assbox.invalidate();
-        gfx.show();
+        for (int i = 0; i < gfx.frameBufferCount; ++i) {
+            gfx.fillRect(0, 0, gfx.xres, gfx.yres, bgcolor);
+            gfx.fillRect(0, 2, gfx.xres, gfx.font->charHeight + 4, Colormap::logo_bg); // hide the ugly fact that two bottom lines are mixed up with the top
+            gfx.setTextColor(Colormap::logo_text, Colormap::logo_bg);
+            gfx.setCursor(4, 4);
+            gfx.print("v06x-tiny-esp32 2024 svofski " VERSION_STRING);
+            filebox.invalidate();
+            assbox.invalidate();
+            gfx.show();
+        }
     }
 
     void show()
@@ -447,7 +454,7 @@ public:
     void frame(int frameno)
     {
         keyboard::scan_matrix();
-        gfx.setCursor(0, 29 * gfx.font->charHeight);
+        gfx.setCursor(0, 29 * gfx.font->charHeight - 2);
         gfx.setTextColor(Colormap::osd_text, Colormap::osd_bg);
         for (int i = 0; i < 8; ++i) {
             gfx.print(keyboard::rows[i], 16, 2);
