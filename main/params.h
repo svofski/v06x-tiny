@@ -30,6 +30,9 @@
 
 #define VI53_CLOCKS_PER_SAMPLE  48  // 1.5MHz clocks per output sample
 
+#define CAS_LOAD_SAMPLERATE     9000    // sample rate for WAVs that we build on the fly when loading CAS files
+#define CAS_PSK_HALFPERIOD      4       // PSK halfperiod for v06c Basic CAS-files
+
 #define I2S_DOUT                17
 #define I2S_BCLK                0   // was 19 in some revisions of the board
 #define I2S_LRC                 18

@@ -71,7 +71,7 @@ struct Blob
 
 struct AssetStorage
 {
-    std::array<std::vector<FileInfo, PSRAMAllocator<FileInfo>>,AK_BAS-AK_ROM+1> files;
+    std::array<std::vector<FileInfo, PSRAMAllocator<FileInfo>>,AK_LAST-AK_ROM+1> files;
 
     static AssetKind guess_kind(std::string path) {
         std::string ext = util::str_tolower_copy(std::filesystem::path(path).extension());
@@ -80,7 +80,7 @@ struct AssetStorage
         if (ext == ".wav") return AK_WAV;
         if (ext == ".fdd") return AK_FDD;
         if (ext == ".edd") return AK_EDD;
-        if (ext == ".bas" || ext == ".asc") return AK_BAS;
+        if (ext == ".bas" || ext == ".asc" || ext == ".cas") return AK_BAS;
 
         return AK_UNKNOWN;
     }
@@ -288,6 +288,7 @@ public:
             #else
             dirent *dent = readdir(dir);
             #endif
+
             for (; dent != nullptr;) {
                 if (dent->d_type == DT_REG) {
                     std::string name{dent->d_name};

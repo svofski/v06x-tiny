@@ -21,6 +21,7 @@
 #include "options.h"
 #include "esp_filler.h"
 #include "sdcard.h"
+#include "cas.h"
 
 #include "testroms.h"
 
@@ -308,6 +309,9 @@ void blob_loaded()
             break;
         case AK_BAS:
             printf("blob_loaded: bas (%d bytes)\n", bytes.size());
+            wav->NumChannels = 1;
+            wav->SampleRate = CAS_LOAD_SAMPLERATE;
+            wav->set_raw_bytes(cas::encode_cas(bytes));
             break;
         default:
             printf("blob_loaded: unknown %d (%d bytes)\n", sdcard.blob.kind, bytes.size());

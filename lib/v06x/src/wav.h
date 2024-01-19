@@ -193,6 +193,16 @@ public:
         return false;
     }
 
+    void set_raw_bytes(const vector<uint8_t> & bytes)
+    {
+        printf("wav: set_raw_bytes: %d samples\n", bytes.size());
+        this->Data.resize(bytes.size());
+        this->merge_stereo<uint8_t>(bytes.data(), bytes.size());
+        if (this->onloaded) {
+            this->onloaded();
+        }
+    }
+
     int sample_at(size_t pos) const 
     {
         return this->Data[pos];
