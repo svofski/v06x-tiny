@@ -11,7 +11,10 @@ using namespace std;
 class Wav
 {
 private:
-    vector<int16_t> Data;
+    typedef uint8_t sample_t;
+
+    vector<sample_t> Data;
+
 public:
     uint16_t NumChannels;
     uint32_t SampleRate;
@@ -55,10 +58,9 @@ private:
     {
         const srctype * src = (srctype *) _src;
         for (size_t i = 0, o = 0; i < count;) {
-            int y = (src[i++] - 128) * 256;
+            int y = src[i++];
             if (this->NumChannels == 2) {
-                y += (src[i++] - 128) * 256;
-                y /= 2;
+                y = (y + src[i++]) / 2;
             }
             this->Data[o++] = y;
         }
@@ -70,12 +72,15 @@ private:
     void merge_stereo(const void * _src, size_t count)
     {
         const srctype * src = (srctype *) _src;
+        
         for (size_t i = 0, o = 0; i < count;) {
             int y = src[i++];
             if (this->NumChannels == 2) {
                 y += src[i++];
                 y /= 2;
             }
+            y /= 256;
+            y += 128;
             this->Data[o++] = y;
         }
     }
@@ -205,7 +210,7 @@ public:
 
     int sample_at(size_t pos) const 
     {
-        return this->Data[pos];
+        return (int)this->Data[pos] - 127;
     }
 
     size_t size() const 
