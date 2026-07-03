@@ -10,7 +10,7 @@
 #include "esp_pm.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
-#include "freertos/xtensa_api.h"
+#include <xtensa_api.h>
 #include "freertos/task.h"
 #include "soc/soc_memory_layout.h"
 //#include "driver/gpio.h"

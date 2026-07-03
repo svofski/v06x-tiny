@@ -2,6 +2,7 @@
 
 #include <inttypes.h>
 #include <vector>
+#include <span>
 #include <functional>
 #include <iostream>
 #include <fstream>
@@ -27,7 +28,7 @@ public:
 private:
     template <typename valtype> 
     typename enable_if<!is_same<valtype,string>::value, valtype>::type
-        token(const vector<uint8_t> & raw, size_t & offset)
+        token(const span<uint8_t> & raw, size_t & offset)
     {
         if (offset + sizeof(valtype) >= raw.size()) {
             throw std::invalid_argument("stream too short");
@@ -40,7 +41,7 @@ private:
 
     template <typename valtype>
     typename enable_if<is_same<valtype,string>::value, valtype>::type
-        token(const vector<uint8_t> & raw, size_t & offset)
+        token(const span<uint8_t> & raw, size_t & offset)
     {
         if (offset + 4 >= raw.size()) {
             throw std::invalid_argument("stream too short");
@@ -86,7 +87,7 @@ private:
     }
 
     // sptr is modified!
-    bool parse_header(const vector<uint8_t> & raw, size_t & sptr)
+    bool parse_header(const span<uint8_t> & raw, size_t & sptr)
     {
         string chunkid = token<string>(raw, sptr);
 
@@ -134,7 +135,7 @@ private:
     }
 
 public:
-    bool set_bytes(const vector<uint8_t> & raw)
+    bool set_bytes(const span<uint8_t> & raw)
     {
         size_t sptr = 0;
 

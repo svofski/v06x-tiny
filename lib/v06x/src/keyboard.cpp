@@ -45,13 +45,19 @@ void init()
     state.ruslat = 0;
     io_state = state;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+
     spi_device_interface_config_t devcfg = {
         .mode = 0, // should be mode 3 because rp2040 spi is so broken, but somehow mode 0 seems to work better
-        .cs_ena_pretrans = 6,
+        //.cs_ena_pretrans = 6,
+        //.cs_ena_posttrans = 6,
         .clock_speed_hz = 9000000,      // 8mhz seems to be the limit
         .spics_io_num = PIN_NUM_KEYBOARD_SS,
         .queue_size = 1,
     };
+
+#pragma GCC diagnostic pop
 
     esp_err_t ret = spi_bus_add_device(SPI2_HOST, &devcfg, &spimatrix);
     ESP_ERROR_CHECK(ret);

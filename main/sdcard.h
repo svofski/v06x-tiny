@@ -181,7 +181,10 @@ public:
         esp_vfs_fat_sdmmc_mount_config_t mount_config = {
             .format_if_mount_failed = false,
             .max_files = 8,
-            .allocation_unit_size = 16 * 1024};
+            .allocation_unit_size = 16 * 1024,
+            .disk_status_check_enable = false,
+            .use_one_fat = true
+        };
 
         sdmmc_host_t host = SDSPI_HOST_DEFAULT();
         host.flags |= SDMMC_HOST_FLAG_1BIT;
@@ -190,6 +193,10 @@ public:
         sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
         slot_config.host_id = SPI2_HOST;
         slot_config.gpio_cs = static_cast<gpio_num_t>(PIN_NUM_SDCARD_SS);
+
+	gpio_set_pull_mode(PIN_NUM_MOSI, GPIO_PULLUP_ONLY); // CMD, needed in 4- and 1- line modes
+	gpio_set_pull_mode(PIN_NUM_MISO, GPIO_PULLUP_ONLY); // D0, needed in 4- and 1-line modes
+	gpio_set_pull_mode(PIN_NUM_CLK, GPIO_PULLUP_ONLY);  // D3, needed in 4- and 1-line modes
 
         ret = esp_vfs_fat_sdspi_mount(MOUNT_POINT_SD, &host, &slot_config, &mount_config, &card);
         if (ret != ESP_OK) {
@@ -343,7 +350,7 @@ public:
 
     void create_pinned_to_core()
     {
-        xTaskCreatePinnedToCore(&SDCard::sdcard_task, "sdcard", 1024*4, this, SDCARD_PRIORITY, NULL, SDCARD_CORE);
+        xTaskCreatePinnedToCore(&SDCard::sdcard_task, "sdcard", 1024*6, this, SDCARD_PRIORITY, NULL, SDCARD_CORE);
     }
 
     static void sdcard_task(void * _self)

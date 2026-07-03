@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <span>
 #include <array>
 #include <cstdio>
 #include <cmath>
@@ -23,6 +24,8 @@ typedef enum {
 
 typedef std::vector<uint8_t> casdata_t;
 typedef std::vector<uint8_t> wavdata_t;
+typedef std::span<uint8_t> wavdata_view_t;
+typedef std::span<uint8_t> casdata_view_t;
 
 constexpr int v06c_preamble_size = 256;
 const std::array<uint8_t, 4>    V06C_BAS { 0xD3, 0xD3, 0xD3, 0xD3 }; // CSAVE
@@ -91,7 +94,7 @@ void fsk_byte(wavdata_t & w, uint8_t octet)
 // frequencies: 0 = 1200Hz / 1 = 2400Hz
 
 // encode data until the next header is encountered, or data ends
-int fsk_data(wavdata_t & w, const casdata_t & casfile, int pos)
+int fsk_data(wavdata_t & w, const casdata_view_t & casfile, int pos)
 {
     while (pos < casfile.size()) {
         if (pos % 8 == 0 && pos + 8 < casfile.size()) {
@@ -125,7 +128,7 @@ void fsk_header(wavdata_t & w, int len)
     }
 }
 
-wavdata_t msx_encode(const casdata_t & casfile)
+wavdata_t msx_encode(const casdata_view_t & casfile)
 {
     wavdata_t w;
     const size_t data_samps = casfile.size() * long_pulse * (1 + 8 + 2);            // data samples, each byte has 1 start bit, 8 data bits, 2 stop bits
@@ -161,7 +164,7 @@ wavdata_t msx_encode(const casdata_t & casfile)
     return w;
 }
 
-wavdata_t v06c_encode(const casdata_t & casfile)
+wavdata_t v06c_encode(const casdata_view_t & casfile)
 {
     wavdata_t raw;
     raw.resize(v06c_preamble_size + casfile.size());
@@ -180,7 +183,7 @@ wavdata_t v06c_encode(const casdata_t & casfile)
     return biphase_encode(raw);
 }
 
-caskind_t cas_guess_kind(const casdata_t & casfile)
+caskind_t cas_guess_kind(const casdata_view_t & casfile)
 {
     if (casfile.size() < V06C_BAS.size()) return CAS_UNKNOWN;
     if (std::equal(V06C_BAS.begin(), V06C_BAS.end(), casfile.begin())) return CAS_CSAVE;
@@ -196,7 +199,7 @@ caskind_t cas_guess_kind(const casdata_t & casfile)
 //      D3 D3 D3 D3 ...  data  -- append preamble
 // basic korvet cas file:
 //      https://www.msx.org/wiki/Emulation_related_file_formats#.CAS
-wavdata_t encode_cas(const wavdata_t & casfile)
+wavdata_t encode_cas(const wavdata_view_t & casfile)
 {
     switch (cas_guess_kind(casfile)) {
         case CAS_BSAVE:

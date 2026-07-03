@@ -12,6 +12,9 @@
 #include "globaldefs.h"
 #include "options.h"
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+
 _options Options = 
 {
     .bootromfile = "",
@@ -38,6 +41,8 @@ _options Options =
                /* ay ch0..2 */    true, true, true},
     .nofilter = false,
 };
+
+#pragma GCC diagnostic pop
 
 #if !defined(__ANDROID_NDK__) && !defined(__GODOT__) && !defined(ESP_PLATFORM)
 

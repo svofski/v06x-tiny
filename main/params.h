@@ -37,11 +37,11 @@
 #define I2S_BCLK                0   // was 19 in some revisions of the board
 #define I2S_LRC                 18
 
-#define PIN_NUM_CLK             12
-#define PIN_NUM_MISO            13
-#define PIN_NUM_MOSI            11
-#define PIN_NUM_KEYBOARD_SS     19
-#define PIN_NUM_SDCARD_SS       10
+#define PIN_NUM_CLK             GPIO_NUM_12
+#define PIN_NUM_MISO            GPIO_NUM_13
+#define PIN_NUM_MOSI            GPIO_NUM_11
+#define PIN_NUM_KEYBOARD_SS     GPIO_NUM_19
+#define PIN_NUM_SDCARD_SS       GPIO_NUM_10
 
 #define BOUNCE_NLINES 10            // bounce buffer height: 288 * 10/6 = 480: scale up 6 lines to 10
 
@@ -51,31 +51,31 @@
 #define LCD_PIXEL_CLOCK_HZ     20500000 // edging at 26500000+ 64+ fps // 20500000 50hz
 #define LCD_BK_LIGHT_ON_LEVEL  1
 #define LCD_BK_LIGHT_OFF_LEVEL !LCD_BK_LIGHT_ON_LEVEL
-#define PIN_NUM_BK_LIGHT       2
-#define PIN_NUM_HSYNC          39
-#define PIN_NUM_VSYNC          41
-#define PIN_NUM_DE             40
-#define PIN_NUM_PCLK           42
+#define PIN_NUM_BK_LIGHT       GPIO_NUM_2
+#define PIN_NUM_HSYNC          GPIO_NUM_39
+#define PIN_NUM_VSYNC          GPIO_NUM_41
+#define PIN_NUM_DE             GPIO_NUM_40
+#define PIN_NUM_PCLK           GPIO_NUM_42
 
-#define PIN_NUM_DATA0          8  // B0
-#define PIN_NUM_DATA1          3  // B1
-#define PIN_NUM_DATA2          46 // B2
-#define PIN_NUM_DATA3          9  // B3
-#define PIN_NUM_DATA4          1  // B4
+#define PIN_NUM_DATA0          GPIO_NUM_8  // B0
+#define PIN_NUM_DATA1          GPIO_NUM_3  // B1
+#define PIN_NUM_DATA2          GPIO_NUM_46 // B2
+#define PIN_NUM_DATA3          GPIO_NUM_9  // B3
+#define PIN_NUM_DATA4          GPIO_NUM_1  // B4
 
-#define PIN_NUM_DATA5          5  // G0
-#define PIN_NUM_DATA6          6  // G1
-#define PIN_NUM_DATA7          7  // G2
-#define PIN_NUM_DATA8          15 // G3
-#define PIN_NUM_DATA9          16 // G4
-#define PIN_NUM_DATA10         4  // G5
+#define PIN_NUM_DATA5          GPIO_NUM_5  // G0
+#define PIN_NUM_DATA6          GPIO_NUM_6  // G1
+#define PIN_NUM_DATA7          GPIO_NUM_7  // G2
+#define PIN_NUM_DATA8          GPIO_NUM_15 // G3
+#define PIN_NUM_DATA9          GPIO_NUM_16 // G4
+#define PIN_NUM_DATA10         GPIO_NUM_4  // G5
 
-#define PIN_NUM_DATA11         45 // R0
-#define PIN_NUM_DATA12         48 // R1
-#define PIN_NUM_DATA13         47 // R2
-#define PIN_NUM_DATA14         21 // R3
-#define PIN_NUM_DATA15         14 // R4
-#define PIN_NUM_DISP_EN        -1
+#define PIN_NUM_DATA11         GPIO_NUM_45 // R0
+#define PIN_NUM_DATA12         GPIO_NUM_48 // R1
+#define PIN_NUM_DATA13         GPIO_NUM_47 // R2
+#define PIN_NUM_DATA14         GPIO_NUM_21 // R3
+#define PIN_NUM_DATA15         GPIO_NUM_14 // R4
+#define PIN_NUM_DISP_EN        GPIO_NUM_NC
 
 
 // The pixel number in horizontal and vertical
@@ -88,8 +88,11 @@
 
 // 20MHz also works, but tends to fail in some programs, e.g. BASKOR.ROM
 // 10MHz seems to be more stable overall
-#define SDCARD_FREQ_KHZ         10000 
+#define SDCARD_FREQ_KHZ         10000
 #define SDCARD_NRETRIES         10
+
+// disable USB-JTAG to stop interference on GPIO 19 & 20
+#define DISABLE_USB_JTAG 1
 
 extern const char * TAG;
 

@@ -646,8 +646,9 @@ void create_lcd_driver_task(void *pvParameter)
         .data_width = 16, // RGB565 in parallel mode, thus 16bit in width
         .num_fbs = LCD_NUM_FB,
         .bounce_buffer_size_px = BOUNCE_NLINES * LCD_H_RES,
-        .sram_trans_align = 32,//8,
-        .psram_trans_align = 64,
+        //.sram_trans_align = 32,//8,
+        //.psram_trans_align = 64,
+        .dma_burst_size = 64,
         .hsync_gpio_num = PIN_NUM_HSYNC,
         .vsync_gpio_num = PIN_NUM_VSYNC,
         .de_gpio_num = PIN_NUM_DE,

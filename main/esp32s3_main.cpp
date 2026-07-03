@@ -32,6 +32,11 @@
 
 #include "params.h"
 
+#if DISABLE_USB_JTAG
+#include "esp_private/usb_console.h"
+#include "soc/usb_serial_jtag_reg.h"
+#endif
+
 const char *TAG = "v06x";
 
 volatile int bounce_empty_ctr = 0;
@@ -72,6 +77,10 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(500));
 
+#if DISABLE_USB_JTAG
+    // disable native USB-JTAG to avoid interference on GPIO 19 (keyboard spi cs)
+    CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
+#endif
     //audio::create_pinned_to_core();   -- hiccups
 
     // initialize spi bus before keyboard and sdcard
@@ -83,11 +92,6 @@ void app_main(void)
     // let the keyboard finish SPI transaction if we were reset
     keyboard::read_rows();
 
-    // this will also scan the directories for all usable assets
-    printf("Delay before mounting SD card\n");
-    vTaskDelay(pdMS_TO_TICKS(500));
-    sdcard.create_pinned_to_core();
-
     v06x::init(scaler_to_emu, scaler::bounce_buf8[0], scaler::bounce_buf8[1]);
     v06x::create_pinned_to_core();
     audio::create_pinned_to_core();     // here it seems to work better -- no hiccups
@@ -97,6 +101,12 @@ void app_main(void)
     osd.y = 0;
 
     osd_change = OSD_NOCHANGE;
+
+    // this will also scan the directories for all usable assets
+    printf("Delay before mounting SD card\n");
+    vTaskDelay(pdMS_TO_TICKS(1500));
+    sdcard.create_pinned_to_core();
+
 
     // show/hide OSD when US+RUS is pressed for 1s
     // called from the main emulator task --> delegate to the frame loop

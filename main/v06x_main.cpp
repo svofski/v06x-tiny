@@ -292,7 +292,8 @@ void v06x_task(void *param)
 // sdcard file is loaded and data is ready to be used
 void blob_loaded()
 {
-    auto &bytes = reinterpret_cast<std::vector<uint8_t> &>(sdcard.blob.bytes); // erase allocator
+    //auto &bytes = reinterpret_cast<std::vector<uint8_t> &>(sdcard.blob.bytes); // erase allocator
+    auto bytes = std::span{sdcard.blob.bytes};
 
     switch (sdcard.blob.kind) {
         case AK_FDD:

@@ -34,15 +34,15 @@ class DetachedDiskImage : public DiskImage
 public:
     DetachedDiskImage() = delete;
 
-    DetachedDiskImage(const std::vector<uint8_t> & data) 
-        : _data(data) // allocating and copying 800KB is too slow for the main thread
+    DetachedDiskImage(const std::span<uint8_t> & data_view) 
     {
+        _data.assign_range(data_view);
         uint32_t csum = 0, _csum = 0;
-        for (int i = 0; i < data.size(); ++i) {
-            csum += data[i];
+        for (int i = 0; i < _data.size(); ++i) {
+            csum += data_view[i];
             _csum += _data[i];
         }
-        printf("DetachedDiskImage:: data=%p, _data=%p csum=%08lx _csum=%08lx\n", data.data(), _data.data(), csum, _csum);
+        printf("DetachedDiskImage:: data=%p, _data=%p csum=%08lx _csum=%08lx\n", data_view.data(), _data.data(), csum, _csum);
     }
 
     ~DetachedDiskImage() override {
@@ -252,7 +252,7 @@ public:
         this->init();
     }
 
-    void attach(const std::vector<uint8_t> & data) 
+    void attach(const std::span<uint8_t> & data) 
     {
         this->dsk = std::make_unique<DetachedDiskImage>(data);
         this->init();
