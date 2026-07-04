@@ -50,8 +50,8 @@ void init()
 
     spi_device_interface_config_t devcfg = {
         .mode = 0, // should be mode 3 because rp2040 spi is so broken, but somehow mode 0 seems to work better
-        //.cs_ena_pretrans = 6,
-        //.cs_ena_posttrans = 6,
+        .cs_ena_pretrans = 2,
+        .cs_ena_posttrans = 2,
         .clock_speed_hz = 9000000,      // 8mhz seems to be the limit
         .spics_io_num = PIN_NUM_KEYBOARD_SS,
         .queue_size = 1,

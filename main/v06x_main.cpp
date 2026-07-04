@@ -122,7 +122,7 @@ void v06x_task(void *param)
     //keyboard::init();
 
 
-#if 0
+#if KEYBOARD_TEST
     for(;;) {
         uint8_t rows[8];
         int shifter = 1;
