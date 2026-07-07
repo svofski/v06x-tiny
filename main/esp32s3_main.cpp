@@ -37,6 +37,8 @@
 #include "soc/usb_serial_jtag_reg.h"
 #endif
 
+#define ENABLE_FRAME_REPORT 1
+
 const char *TAG = "v06x";
 
 volatile int bounce_empty_ctr = 0;
@@ -181,8 +183,11 @@ void app_main(void)
 
         if (frame_no % 50 == 0) {
             #if ENABLE_FRAME_REPORT
-            printf("fps=%d v06x_fps=%d cycles=%d frame dur=%lluus\r",
-                scaler::fps, scaler::v06x_fps, (esp_filler::v06x_frame_cycles - last_frame_cycles) / 50, scaler::frameduration_us);
+            printf("fps=%d v06x_fps=%d cycles=%d frame dur=%lluus scaler_max=%lu::::   \r",
+                scaler::fps, scaler::v06x_fps,
+                (esp_filler::v06x_frame_cycles - last_frame_cycles) / 50,
+                scaler::frameduration_us,
+                scaler::print_scaler_max);
             #endif
             last_frame_cycles = esp_filler::v06x_frame_cycles;
         }

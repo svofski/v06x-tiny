@@ -8,6 +8,8 @@ namespace scaler
 extern volatile int fps;
 extern volatile int v06x_fps;
 extern volatile uint64_t frameduration_us;
+extern volatile uint32_t scaler_max;
+extern volatile uint32_t print_scaler_max;
 
 extern uint8_t * bounce_buf8[2];
 

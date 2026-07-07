@@ -25,17 +25,37 @@
 #include "esp_filler.h"
 #include "osd.h"
 
+#define DITHER_FRAMES 1
+#define LUT_8TO16 1
+#define SCALER_BENCHMARK 1
+
 #define _C8TO16(c)   (((((c) & 7) * 4) << 11) | (((((c) >> 3) & 7) * 8) << 5) | ((((c) >> 6) & 3) * 8))
 
 extern bool sdcard_busy;
 
+#if LUT_8TO16
+static uint16_t c8to16lut[256];
+#endif
+
 IRAM_ATTR
 static inline uint16_t C8TO16(uint8_t c) 
 {
+#if LUT_8TO16
+    return c8to16lut[c];
+#else
     return _C8TO16(c);
+#endif
 }
 
-#define DITHER_FRAMES 1
+void precalc_lut()
+{
+#if LUT_8TO16
+    for (unsigned i = 0; i < 256; ++i) {
+        c8to16lut[i] = _C8TO16(i);
+    }
+#endif
+}
+
 
 extern QueueHandle_t scaler_to_emu;
 
@@ -55,7 +75,7 @@ uint8_t * bounce_buf8[2];
 //uint16_t** osd_buf16;
 OSD * osd;
 OSD * set_osd = nullptr;
-bool  set_osd_pls = false;
+volatile bool  set_osd_pls = false;
 
 volatile int framecount = 0;
 volatile uint64_t lastframe_us = 0;
@@ -63,6 +83,8 @@ volatile uint64_t frameduration_us = 0;
 
 volatile int fps = 0;
 volatile int v06x_fps = 0;
+volatile uint32_t print_scaler_max = 0;
+volatile uint32_t scaler_max = 0;
 
 static void create_lcd_driver_task(void *pvParameter);
 static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t *event_data, void *user_data);
@@ -70,9 +92,9 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
 void allocate_buffers()
 {
 
-    bounce_buf8[0] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 6 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)) + 6; // alignment offset for main screen area
+    bounce_buf8[0] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 6 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT));
     assert(bounce_buf8[0]);
-    bounce_buf8[1] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 6 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT)) + 6; // alignment offset for main screen area
+    bounce_buf8[1] = static_cast<uint8_t *>(heap_caps_malloc(BUFCOLUMNS * 6 * sizeof(uint8_t) + 32, MALLOC_CAP_INTERNAL | MALLOC_CAP_32BIT));
     assert(bounce_buf8[1]);
 
     memset(bounce_buf8[0], 0, BUFCOLUMNS * 6 * sizeof(uint8_t));
@@ -82,6 +104,7 @@ void allocate_buffers()
 
 void create_pinned_to_core()
 {
+    precalc_lut();
     xTaskCreatePinnedToCore(&create_lcd_driver_task, "scaler_task", 1024*4, NULL, SCALER_PRIORITY, NULL, SCALER_CORE);
     xSemaphoreGive(sem_gui_ready);
     xSemaphoreTake(sem_vsync_end, portMAX_DELAY);
@@ -138,6 +161,8 @@ static void tick_1s(void *arg)
     framecount = 0;  
 
     v06x_fps = esp_filler::v06x_framecount;
+    scaler::print_scaler_max = scaler::scaler_max;
+    scaler::scaler_max = 0;
     esp_filler::v06x_framecount = 0;
 }
 
@@ -204,7 +229,7 @@ fillcolumn_h54(uint16_t * col, uint32_t * src)
 // scaler 5/4 horizontal, 8/5 vertical, or 4x5 -> 6x8
 // bgr233 532x300 -> rgb565 798x480
 static void IRAM_ATTR 
-fillcolumn_h54_v106(uint16_t * col, uint32_t * src)
+fillcolumn_h54_v106(uint16_t * col, const uint32_t * __restrict src)
 {
     int ofs = 0;
 
@@ -276,7 +301,7 @@ fillcolumn_h54_v106(uint16_t * col, uint32_t * src)
 
 // hscale 1:1
 static void IRAM_ATTR 
-fillcolumn_h11_v106(uint16_t * col, uint32_t * src)
+fillcolumn_h11_v106(uint16_t * col, const uint32_t * __restrict src)
 {
     int ofs = 0;
 
@@ -350,9 +375,9 @@ fillcolumn_h11_v106(uint16_t * col, uint32_t * src)
 // scaler 5/4 horizontal, 8/5 vertical, or 4x5 -> 6x8
 // bgr233 532x300 -> rgb565 798x480
 static void IRAM_ATTR 
-fillcolumn_h54_v106_dither_a(uint16_t * col, const uint32_t * src)
+fillcolumn_h54_v106_dither_a(uint16_t * col, const uint32_t * __restrict src)
 {
-    int ofs = 0;
+    uint16_t * pcol = col;
 
     // column: [0.0, 0.6, 1.2, 1.8, 2.4, 3.0, 3.6, 4.2, 4.8, 5.4]
     uint32_t s4_0 = src[0];
@@ -373,57 +398,57 @@ fillcolumn_h54_v106_dither_a(uint16_t * col, const uint32_t * src)
     c16_3 = C8TO16(s4_0 >> 16);
     c16_4 = C8TO16(s4_0 >> 24);
         // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
-        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 1
+        pcol[0] = c16_1; pcol[1] = c16_1; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 1
     // y + 0.6, y + 1.2
     c16_1 = C8TO16(s4_1 >> 0);
     c16_2 = C8TO16(s4_1 >> 8);
     c16_3 = C8TO16(s4_1 >> 16);
     c16_4 = C8TO16(s4_1 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;   // dst_line = 2
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;   // dst_line = 3
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;   // dst_line = 2
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;   // dst_line = 3
     // y + 1.8, y + 2.4
     c16_1 = C8TO16(s4_2 >> 0);
     c16_2 = C8TO16(s4_2 >> 8);
     c16_3 = C8TO16(s4_2 >> 16);
     c16_4 = C8TO16(s4_2 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 4
-        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 5
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_4; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 4
+        pcol[0] = c16_1; pcol[1] = c16_1; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 5
     // y = 3.0
     c16_1 = C8TO16(s4_3 >> 0);
     c16_2 = C8TO16(s4_3 >> 8);
     c16_3 = C8TO16(s4_3 >> 16);
     c16_4 = C8TO16(s4_3 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 6
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 6
     // y + 3.6, y + 4.2
     c16_1 = C8TO16(s4_4 >> 0);
     c16_2 = C8TO16(s4_4 >> 8);
     c16_3 = C8TO16(s4_4 >> 16);
     c16_4 = C8TO16(s4_4 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 7
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 8
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 7
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_4; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 8
     // y + 4.8, y + 5.4
     c16_1 = C8TO16(s4_5 >> 0);
     c16_2 = C8TO16(s4_5 >> 8);
     c16_3 = C8TO16(s4_5 >> 16);
     c16_4 = C8TO16(s4_5 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 9
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
+        pcol[0] = c16_1; pcol[1] = c16_1; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 9
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_4; pcol[4] = c16_4;
         //ofs += LCD_H_RES;  // dst_line = 10
 }
 
 static void IRAM_ATTR 
-fillcolumn_h54_v106_dither_b(uint16_t * col, uint32_t * src)
+fillcolumn_h54_v106_dither_b(uint16_t * col, const uint32_t * __restrict src)
 {
-    int ofs = 0;
+    uint16_t * pcol = col;
 
     // column: [0.0, 0.6, 1.2, 1.8, 2.4, 3.0, 3.6, 4.2, 4.8, 5.4]
     uint32_t s4_0 = src[0];
@@ -444,50 +469,50 @@ fillcolumn_h54_v106_dither_b(uint16_t * col, uint32_t * src)
     c16_3 = C8TO16(s4_0 >> 16);
     c16_4 = C8TO16(s4_0 >> 24);
         // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 1
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;   // dst_line = 2
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 1
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_4; pcol[4] = c16_4;
+        pcol += LCD_H_RES;   // dst_line = 2
     // y + 0.6, y + 1.2
     c16_1 = C8TO16(s4_1 >> 0);
     c16_2 = C8TO16(s4_1 >> 8);
     c16_3 = C8TO16(s4_1 >> 16);
     c16_4 = C8TO16(s4_1 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;   // dst_line = 3
+        pcol[0] = c16_1; pcol[1] = c16_1; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;   // dst_line = 3
     // y + 1.8, y + 2.4
     c16_1 = C8TO16(s4_2 >> 0);
     c16_2 = C8TO16(s4_2 >> 8);
     c16_3 = C8TO16(s4_2 >> 16);
     c16_4 = C8TO16(s4_2 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 4
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 5
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 4
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 5
     // y = 3.0
     c16_1 = C8TO16(s4_3 >> 0);
     c16_2 = C8TO16(s4_3 >> 8);
     c16_3 = C8TO16(s4_3 >> 16);
     c16_4 = C8TO16(s4_3 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 6
-        col[ofs] = c16_1; col[ofs+1] = c16_1; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 7
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_4; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 6
+        pcol[0] = c16_1; pcol[1] = c16_1; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 7
     // y + 3.6, y + 4.2
     c16_1 = C8TO16(s4_4 >> 0);
     c16_2 = C8TO16(s4_4 >> 8);
     c16_3 = C8TO16(s4_4 >> 16);
     c16_4 = C8TO16(s4_4 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 8
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_2; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 8
     // y + 4.8, y + 5.4
     c16_1 = C8TO16(s4_5 >> 0);
     c16_2 = C8TO16(s4_5 >> 8);
     c16_3 = C8TO16(s4_5 >> 16);
     c16_4 = C8TO16(s4_5 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // dst_line = 9
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_3; col[ofs+3] = c16_4; col[ofs+4] = c16_4;
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_3; pcol[4] = c16_4;
+        pcol += LCD_H_RES;  // dst_line = 9
+        pcol[0] = c16_1; pcol[1] = c16_2; pcol[2] = c16_3; pcol[3] = c16_4; pcol[4] = c16_4;
 }
 
 #if DEBUG_BOUNCE_BUFFERS
@@ -501,7 +526,7 @@ static int tutu_frm_reg = 0;
 #endif
 
 static void IRAM_ATTR
-copy_osd(uint16_t * bounce16, int lcd_y)
+copy_osd(uint16_t * __restrict bounce16, int lcd_y)
 {
     OSD::Color** osd_srcbuf = osd->framebuffer();
     int osdx = osd->x;
@@ -515,8 +540,8 @@ copy_osd(uint16_t * bounce16, int lcd_y)
         {
             // convert 8-bit bgr233 osd buffer to double-scanned native 16-bit rgb565
             uint16_t *dst = bounce16 + i * LCD_H_RES + osdx;
-            uint16_t *dst2 = dst + LCD_H_RES; // scandouble of the go
-            uint8_t *src = osd_srcbuf[(lcd_y + i - osdy_first) >> 1];
+            uint16_t *dst2 = dst + LCD_H_RES; // scandouble on the go
+            const uint8_t *src = osd_srcbuf[(lcd_y + i - osdy_first) >> 1];
             for (int j = 0; j < osd_w; j += 2)
             {
                 uint8_t c1 = *src++;
@@ -532,11 +557,25 @@ copy_osd(uint16_t * bounce16, int lcd_y)
     }
 }
 
+
+#if SCALER_BENCHMARK 
+static inline uint32_t getccount()
+{
+    uint32_t ccount;
+    asm volatile("rsr.ccount %0" : "=a"(ccount));
+    return ccount;
+}
+#endif
+
 static bool IRAM_ATTR 
 on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px, int len_bytes, void *user_ctx)
 {
     BaseType_t high_task_awoken = pdFALSE;
     xQueueSendFromISR(scaler_to_emu, &pos_px, &high_task_awoken);
+
+#if SCALER_BENCHMARK
+    uint32_t scaler_start = getccount();
+#endif
 
 #if DEBUG_BOUNCE_BUFFERS
     if (pos_px == 0) {
@@ -612,6 +651,12 @@ on_bounce_empty_event(esp_lcd_panel_handle_t panel, void *bounce_buf, int pos_px
 
     // flip buffers for the next time
     read_buffer_index ^= 1;
+
+#if SCALER_BENCHMARK
+    uint32_t scaler_elapsed = getccount() - scaler_start;
+    if (scaler_elapsed > scaler_max) 
+        scaler_max = scaler_elapsed;
+#endif
 
     return true;
 }
