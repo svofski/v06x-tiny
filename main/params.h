@@ -7,7 +7,8 @@
 
 #define SCALER_CORE     1           // video scaler core
 #define EMU_CORE        0           // main emulator loop
-#define AUDIO_CORE      1           // audio buffers copy/send
+#define AUDIO_CORE      0           // audio buffers copy/send
+                                    // same core for emu/audio seems to be less glitchy
 #define SDCARD_CORE     1           // sdcard i/o
 
 #define SCALER_PRIORITY (configMAX_PRIORITIES - 1)

@@ -21,6 +21,7 @@ namespace esp_filler {
 
     extern volatile int v06x_framecount;
     extern volatile int v06x_frame_cycles;
+    extern volatile uint32_t print_coconut_max;   // slab8 benchmark
 
     extern std::function<void(void)> onosd;
 

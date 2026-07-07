@@ -60,25 +60,24 @@ void audio_task(void *unused)
     ESP_ERROR_CHECK(i2s_channel_enable(tx_handle));
     ESP_LOGI(TAG, "Created I2S channel and started audio task");
     while(1) {
-        int num;
+        audio_queue_item_t aqi;
         size_t written;
-        BaseType_t result = xQueueReceive(audio_queue, &num, portMAX_DELAY);
+        BaseType_t result = xQueueReceive(audio_queue, &aqi, portMAX_DELAY);
         if (result == pdTRUE) {
             #ifdef CLEAN_BEEP_TEST
             for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
-                audio_pp[num][i] = ((i / 12) & 1) << 13;
+                audio_pp[aqi.audiobuf_index][i] = ((i / 12) & 1) << 13;
             }
             #endif
-            AySound::gen_sound(AUDIO_SAMPLES_PER_FRAME - esp_filler::ay_bufpos_reg, esp_filler::ay_bufpos_reg);
+            AySound::gen_sound(AUDIO_SAMPLES_PER_FRAME - aqi.ay_bufpos, aqi.ay_bufpos);
             for (size_t i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
-                audio_pp[num][i] += ay_pp[num][i] << AUDIO_SCALE_AY;
-                //audio_copy[i] = /*audio_pp[num][i] +*/ ((audio_sample_t)ay_pp[num][i] << AUDIO_SCALE_AY);
+                audio_pp[aqi.audiobuf_index][i] += ay_pp[aqi.audiobuf_index][i] << AUDIO_SCALE_AY;
             }
         }
         //i2s_channel_write(tx_handle, audio_copy, AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 5 / portTICK_PERIOD_MS);
-        i2s_channel_write(tx_handle, audio_pp[num], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 50 / portTICK_PERIOD_MS);
-        //printf("audio: buf %d -> %u\n", num, written);
-        //printf("ay: falta %d samps\n", AUDIO_SAMPLES_PER_FRAME - esp_filler::ay_bufpos_reg);
+        i2s_channel_write(tx_handle, audio_pp[aqi.audiobuf_index], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 50 / portTICK_PERIOD_MS);
+        //printf("audio: buf %d -> %u\n", aqi.audiobuf_index, written);
+        //printf("ay: falta %d samps\n", AUDIO_SAMPLES_PER_FRAME - aqi.ay_bufpos);
     }
 }
 #endif

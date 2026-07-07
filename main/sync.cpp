@@ -28,7 +28,7 @@ void create_primitives()
     assert(sem_gui_ready);
 
     scaler_to_emu = xQueueCreate(2, sizeof(int));
-    audio_queue = xQueueCreate(AUDIO_NBUFFERS, sizeof(int));
+    audio_queue = xQueueCreate(AUDIO_NBUFFERS, sizeof(audio_queue_item_t));
     emu_command_queue = xQueueCreate(1, sizeof(int));
 }
 

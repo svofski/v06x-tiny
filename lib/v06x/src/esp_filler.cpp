@@ -1,5 +1,7 @@
-#define ESP_DELAYED_COMMIT 1
-#define USE_BIT_PERMUTE 1
+// pick one of the two
+#define USE_BIT_PERMUTE 0
+#define USE_SPREAD_LUT 1      // 4.5% faster than permute
+//
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -23,8 +25,12 @@
 
 int audiobuf_index;
 
-namespace esp_filler 
+namespace esp_filler
 {
+
+#if USE_SPREAD_LUT
+void init_spread_lut();
+#endif
 
 /*
     v: vector/tv raster line
@@ -35,7 +41,7 @@ namespace esp_filler
                             ...
                         0v --------- no framebuffer carefree computing
                         5v  ...
-first visible line:     10v switch on buffer writes 
+first visible line:     10v switch on buffer writes
                             select buf[0]
                             compute lines 10v..14v / 0u..4u -> buf[0]
                             wait until 0 comes in on_fill queue
@@ -44,7 +50,7 @@ first visible line:     10v switch on buffer writes
                         20v compute lines 20v..24v / 10u..14u -> buf[0]
                             ...
                             wait until 472 comes in on_fill queue
-                        300v -- off screen area 
+                        300v -- off screen area
                             switch off buffer writes
                             compute lines 300v..311v
                             ...
@@ -137,7 +143,7 @@ void print_palette()
     printf("\n");
 }
 
-void commit_palette(int index) 
+void commit_palette(int index)
 {
     esp_filler::write_pal(index, palette_byte);
     modechange();
@@ -147,13 +153,13 @@ void init(Memory * _memory, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _v
 {
     memory = _memory;
     auto _mem32 = reinterpret_cast<uint32_t *>(memory->buffer());
-    mem32 = &_mem32[0x2000]; // pre-offset 
+    mem32 = &_mem32[0x2000]; // pre-offset
     io = _io;
     buffers[0] = buf1;
     buffers[1] = buf2;
     vi53 = _vi53;
     tape_player = _tape_player;
-    write_buffer = 0;    
+    write_buffer = 0;
     bmp.bmp8 = buffers[0];
 
     audiobuf_index = 0;
@@ -170,17 +176,28 @@ void init(Memory * _memory, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _v
     };
 
     inte = 0;
+
+#if USE_SPREAD_LUT
+    init_spread_lut();
+#endif
 }
 
 void frame_start()
 {
-    // It is tempting to reset the pixel count but the beam is reset in 
+    // It is tempting to reset the pixel count but the beam is reset in
     // advanceLine(), don't do that here.
     //this->raster_pixel = 0;   // horizontal pixel counter
 
     fb_column = 0;      // frame buffer column
     fb_row = 0;         // frame buffer row
     irq = false;
+}
+
+static inline uint32_t getccount()
+{
+    uint32_t ccount;
+    asm volatile("rsr.ccount %0" : "=a"(ccount));
+    return ccount;
 }
 
 #if USE_BIT_PERMUTE
@@ -191,7 +208,6 @@ static uint32_t bit_permute_step(uint32_t x, uint32_t m, uint32_t shift) {
     x = (x ^ t) ^ (t << shift);
     return x;
 }
-#endif
 
 IRAM_ATTR
 uint32_t fetchNicePixels()
@@ -205,6 +221,47 @@ uint32_t fetchNicePixels()
     x = bit_permute_step(x, 0x000000ff, 24);  // Bit index swap+complement 3,4
     return x;
 }
+#endif
+
+#if USE_SPREAD_LUT
+DRAM_ATTR
+uint32_t plane_spread_lut[256];
+
+void init_spread_lut() {
+    for (int i = 0; i < 256; ++i) {
+        plane_spread_lut[i] =
+            ((i & 0x80) << 21) |
+            ((i & 0x40) << 18) |
+            ((i & 0x20) << 15) |
+            ((i & 0x10) << 12) |
+            ((i & 0x08) << 9)  |
+            ((i & 0x04) << 6)  |
+            ((i & 0x02) << 3)  |
+            ((i & 0x01));
+    }
+}
+
+IRAM_ATTR
+uint32_t fetchNicePixels()
+{
+    size_t addr = ((fb_column & 0xff) << 8) | (fb_row & 0xff);
+    uint32_t x = mem32[addr];
+
+    uint8_t p0 = x & 0xFF;
+    uint8_t p1 = (x >> 8) & 0xFF;
+    uint8_t p2 = (x >> 16) & 0xFF;
+    uint8_t p3 = (x >> 24) & 0xFF;
+
+    uint32_t chunky =
+          plane_spread_lut[p3]
+        | (plane_spread_lut[p2] << 1)
+        | (plane_spread_lut[p1] << 2)
+        | (plane_spread_lut[p0] << 3);
+
+    return chunky;
+}
+#endif
+
 
 IRAM_ATTR
 inline int shiftNicePixels(uint32_t & nicepixels)
@@ -214,6 +271,8 @@ inline int shiftNicePixels(uint32_t & nicepixels)
     return modeless;
 }
 
+volatile uint32_t print_coconut_max = 0;
+volatile uint32_t coconut_max = 0;
 
 IRAM_ATTR
 inline void slab8()
@@ -252,7 +311,7 @@ inline void slab8_pal()
         uint8_t i4 = shiftNicePixels(nicepixels);
         *bmp.bmp16++ = py2[i1];
         *bmp.bmp16++ = py2[i2];
-        if (commit_pal) commit_palette(i2); 
+        if (commit_pal) commit_palette(i2);
         // // if we commit with i2 here, the 8bit snail flickers, clrspace is good
         // // with i1: 8bit snail is good, clrspace is broken
         if (commit_io && --commit_io == 0) {
@@ -339,7 +398,7 @@ inline void gensound_vi53()
     // to make tape-in sound pretty vi53->gen_sound() should call tape_player->advance() instead
     //esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
     //esp_filler::vi53->tapein = esp_filler::tape_player->sample();
-    vi53->count_tape = [](int n) { 
+    vi53->count_tape = [](int n) {
         esp_filler::tape_player->advance(n);
         return esp_filler::tape_player->sample();
     };
@@ -351,7 +410,7 @@ inline void gensound_vi53()
 IRAM_ATTR
 int bob(int maxframes)
 {
-    // have two counters: 
+    // have two counters:
     //  ipixels -- instruction pixels, or cpu instruction cycles * 4
     //  rpixels -- raster pixels, 768 rpixels per raster line
     // one frame is 59904 * 4 = 239616 ipixels
@@ -375,12 +434,16 @@ int bob(int maxframes)
 
     // filling the void: no reason to count individual pixels in this area
     rpixels = last_rpixels = frame_rpixels = 0;
-    int ipixels = rpixels; 
+    int ipixels = rpixels;
 
     int line6 = 0;          // everything is computed in 6-line chunks that fill up scaler input buffer
     ay_bufpos_reg = 0;
 
+
     for(int frm = 0; maxframes == 0 || frm < maxframes; ++frm) {
+        print_coconut_max = coconut_max;
+        coconut_max = 0;
+
         write_buffer = 0;
         bmp.bmp8 = buffers[write_buffer];
         line6 = 6;
@@ -399,7 +462,7 @@ int bob(int maxframes)
             int column;
             bool line_is_visible = line >= first_visible_line && line <= last_visible_line;
             if (!line_is_visible) {
-                // invisible 
+                // invisible
                 for (column = 0; column < 48; ++column) {
                     if (line == 0 && column == 9) {
                         irq = inte;
@@ -430,7 +493,7 @@ int bob(int maxframes)
             }
 
             // visible but no raster, vertical border
-            if (line < first_raster_line || line >= last_raster_line) {  
+            if (line < first_raster_line || line >= last_raster_line) {
                 for (column = 0; column < 48; ++column) {
                     #if DEBUG_INSTRUCTION_STRIPES
                     bool xoxo = false;
@@ -479,22 +542,29 @@ int bob(int maxframes)
             }
 
             if (line == 40) {
-                fb_row = io->ScrollStart(); 
+                fb_row = io->ScrollStart();
             }
 
             borderslab();
             fb_column = -1;
             /// COLUMNS 10...41
-            for (; column < 42; ++column) {
-                // (4, 8, 12, 16, 20, 24) * 4
-                if (ipixels <= rpixels) [[unlikely]] {
-                    commit_pal = false;
-                    ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+            {
+                uint32_t coconut = getccount();
+
+                for (; column < 42; ++column) {
+                    // (4, 8, 12, 16, 20, 24) * 4
+                    if (ipixels <= rpixels) [[unlikely]] {
+                        commit_pal = false;
+                        ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+                    }
+
+                    ++fb_column;
+                    slab8_pal();
+                    rpixels += 4;
                 }
 
-                ++fb_column;
-                slab8_pal();
-                rpixels += 4;
+                uint32_t elapsed = getccount() - coconut;
+                coconut_max += elapsed;
             }
 
             // COLUMN 42: right edge of the bitplane area
@@ -547,7 +617,7 @@ rowend:
             }
         }
         keyboard::io_commit_ruslat();
-        keyboard::io_read_modkeys(); 
+        keyboard::io_read_modkeys();
 
         if ((keyboard::state.pc & keyboard::PC_MODKEYS_MASK) == ((keyboard::PC_BIT_US | keyboard::PC_BIT_RUSLAT) ^ keyboard::PC_MODKEYS_MASK)
             || (keyboard::state.pc & keyboard::PC_MODKEYS_MASK) == ((keyboard::PC_BIT_SS | keyboard::PC_BIT_RUSLAT) ^ keyboard::PC_MODKEYS_MASK)) {
@@ -562,21 +632,15 @@ rowend:
 
         {
             int nsamps = vi53->audio_buf - audio::audio_pp[audiobuf_index];
-            //if (nsamps != 312 * 2) {
-            //    printf("WTF: vi53_gen: nsamps=%d\n", nsamps);
-            //}
         }
 
-        //if (frm >= 200 && frm <= 203) {
-        //    for (int i = 0; i < 624; ++i) {
-        //        printf("%8d", audio::audio_pp[audiobuf_index][i]);
-        //    }
-        //    printf("\n---\n");
-        //}
-
         ay_bufpos_reg = ay_bufpos;
+        audio_queue_item_t aqi = {
+            .audiobuf_index = audiobuf_index,
+            .ay_bufpos = ay_bufpos
+        };
         // post audio buffer index to be taken in by the audio driver
-        xQueueSend(::audio_queue, &audiobuf_index,  5 / portTICK_PERIOD_MS);
+        xQueueSend(::audio_queue, &aqi,  5 / portTICK_PERIOD_MS);
         if (++audiobuf_index == AUDIO_NBUFFERS) audiobuf_index = 0;
 
         vi53->audio_buf = audio::audio_pp[audiobuf_index];
@@ -618,7 +682,7 @@ void init_bootrom(const uint8_t* src, size_t size)
         printf("User bootrom: %s (%u bytes)\n", Options.bootromfile.c_str(),
           userboot.size());
         boot = userboot;
-    } 
+    }
     else {
         boot.resize(size);
         for (unsigned i = 0; i < size; ++i) {
@@ -691,7 +755,7 @@ void i8080_hal_io_output(int port, int value)
 
     #if 0
 
-    #ifndef TIMED_COMMIT    
+    #ifndef TIMED_COMMIT
     esp_filler::io->commit_palette(0x0f & esp_filler::color_index);
     #else
     // non-palette i/o
@@ -707,7 +771,7 @@ void i8080_hal_io_output(int port, int value)
         }
         esp_filler::io->commit();           // all regular peripherals
     }
-    else if (port <= 0xb) {        
+    else if (port <= 0xb) {
         if (port >= 0x08) {
             #ifndef VI53_GENSOUND
             esp_filler::vi53->count_clocks((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line

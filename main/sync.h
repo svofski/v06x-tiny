@@ -11,6 +11,11 @@ extern SemaphoreHandle_t sem_vsync_end;
 extern SemaphoreHandle_t sem_gui_ready;
 extern SemaphoreHandle_t sem_osd_takeover;
 
+typedef struct {
+    int audiobuf_index;
+    int ay_bufpos;
+} audio_queue_item_t;
+
 // scaler to emulator: request next 6 lines
 extern QueueHandle_t scaler_to_emu;
 extern QueueHandle_t audio_queue;

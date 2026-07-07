@@ -40,11 +40,11 @@ void CounterUnit::reset()
     latch_mode = 0;
     mode_int = 0;
     loadvalue = 0;
-    flags = 0;    
+    flags = 0;
     value = 0;
 }
 
-void CounterUnit::SetMode(int new_mode, int new_latch_mode, int new_bcd_mode) 
+void CounterUnit::SetMode(int new_mode, int new_latch_mode, int new_bcd_mode)
 {
     this->count_clocks(1);
     this->bcd = new_bcd_mode;
@@ -94,7 +94,7 @@ void CounterUnit::Latch(uint8_t w8) {
 
 IRAM_ATTR
 inline void CounterUnit::mode0(int nclocks) // Interrupt on terminal count
-{    
+{
     if (this->load) {
         this->value = this->loadvalue;
         this->enabled = true;
@@ -117,7 +117,7 @@ inline void CounterUnit::mode0(int nclocks) // Interrupt on terminal count
 
 IRAM_ATTR
 void CounterUnit::mode1(int nclocks)
-{        
+{
     // Programmable one-shot
     if (!this->enabled && this->load) {
         this->enabled = true;
@@ -126,7 +126,7 @@ void CounterUnit::mode1(int nclocks)
     if (this->enabled) {
         this->value -= nclocks;
         if (this->value <= 0) {
-            int reload = this->loadvalue == 0 ? 
+            int reload = this->loadvalue == 0 ?
                 (this->bcd ? 10000 : 0x10000 ) : (this->loadvalue + 1);
             this->value += reload;
         }
@@ -135,7 +135,7 @@ void CounterUnit::mode1(int nclocks)
 
 IRAM_ATTR
 void CounterUnit::mode2(int nclocks)
-{    
+{
     // Rate generator
     if (!this->enabled && this->load) {
         this->value = this->loadvalue;
@@ -144,17 +144,15 @@ void CounterUnit::mode2(int nclocks)
     }
     this->value -= nclocks;
     if (this->value <= 0) {
-        do {
-            int reload = this->loadvalue == 0 ? (this->bcd ? 10000 : 0x10000 ) : this->loadvalue;
-            this->value += reload;
-        } while(this->value <= 0);
+        int reload = (this->loadvalue == 0) ? (this->bcd ? 10000 : 0x10000) : this->loadvalue;
+        int skips = (-this->value) / reload + 1;
+        this->value += skips * reload;
     }
 }
 
 IRAM_ATTR
 inline void CounterUnit::mode3(int nclocks)
 {
-    // Square wave generator
     if (!this->enabled && this->load) {
         this->value = this->loadvalue;
         this->load = false;
@@ -162,8 +160,24 @@ inline void CounterUnit::mode3(int nclocks)
     }
     if (this->enabled) {
         this->value -= nclocks + nclocks;
+
         if (this->value <= 0) {
-            do {
+            int reload = (this->loadvalue == 0) ? (this->bcd ? 10000 : 0x10000) : this->loadvalue;
+
+            bool is_odd = (reload & 1);
+            int step_to_0 = reload - (is_odd ? 3 : 0);
+            int step_to_1 = reload - (is_odd ? 1 : 0);
+
+            int full_cycle = step_to_0 + step_to_1;
+
+            if (full_cycle > 0) {
+                int skip_cycles = (-this->value) / full_cycle;
+                this->value += skip_cycles * full_cycle;
+            } else {
+                this->value = 1;
+            }
+
+            while (this->value <= 0) {
                 // a hax to avoid nasty high-pitched sounds
                 #if VI53_HIGH_FREQ_MUTE
                 if (this->loadvalue > 96) {
@@ -172,26 +186,22 @@ inline void CounterUnit::mode3(int nclocks)
                 #if VI53_HIGH_FREQ_MUTE
                 }
                 #endif
-                int reload = (this->loadvalue == 0) ? (this->bcd ? 10000 : 0x10000) : this->loadvalue;
-                this->value += reload;
-                if ((reload & 1) == 1) {
-                    this->value -= this->out == 0 ? 3 : 1;
-                }
-                //printf("this->value=%d\n", this->value);
-            } while(this->value <= 0);
+
+                this->value += (this->out == 0) ? step_to_0 : step_to_1;
+            }
         }
     }
 }
 
 void CounterUnit::mode4(int nclocks)
-{        
+{
 }
 void CounterUnit::mode5(int nclocks)
-{        
+{
 }
 
 IRAM_ATTR
-void CounterUnit::count_clocks(int nclocks) 
+void CounterUnit::count_clocks(int nclocks)
 {
     switch (this->mode_int) {
         case 0: // Interrupt on terminal count
@@ -217,7 +227,7 @@ void CounterUnit::count_clocks(int nclocks)
 
 void CounterUnit::write_value(uint8_t w8) {
     if (this->latch_mode == 3) {
-        // lsb, msb             
+        // lsb, msb
         switch (this->write_state) {
             case 0:
                 this->write_lsb = w8;
@@ -226,7 +236,7 @@ void CounterUnit::write_value(uint8_t w8) {
             case 1:
                 this->write_msb = w8;
                 this->write_state = 0;
-                this->loadvalue = ((this->write_msb << 8) & 0xffff) | 
+                this->loadvalue = ((this->write_msb << 8) & 0xffff) |
                     (this->write_lsb & 0xff);
                 this->load = true;
                 //printf("load_value=%d\n", this->loadvalue);
@@ -239,7 +249,7 @@ void CounterUnit::write_value(uint8_t w8) {
         this->loadvalue = w8;
         this->load = true;
     } else if (this->latch_mode == 2) {
-        // msb only 
+        // msb only
         this->value = w8 << 8;
         this->value &= 0xffff;
         this->loadvalue = this->value;
@@ -261,13 +271,13 @@ int CounterUnit::read_value()
             break;
         case 1:
             value = this->latch_value != -1 ? this->latch_value : this->value;
-            this->latch_value = -1; 
+            this->latch_value = -1;
             value = this->bcd ? tobcd(value) : value;
             value &= 0xff;
             break;
         case 2:
             value = this->latch_value != -1 ? this->latch_value : this->value;
-            this->latch_value = -1; 
+            this->latch_value = -1;
             value = this->bcd ? tobcd(value) : value;
             value = (value >> 8) & 0xff;
             break;
@@ -302,7 +312,7 @@ I8253::I8253() : control_word(0)
     this->covox = 0;
 }
 
-void I8253::write_cw(uint8_t w8) 
+void I8253::write_cw(uint8_t w8)
 {
     unsigned counter_set = (w8 >> 6) & 3;
     int mode_set = (w8 >> 1) & 3;
@@ -322,7 +332,7 @@ void I8253::write_cw(uint8_t w8)
     }
 }
 
-void I8253::write(int addr, uint8_t w8) 
+void I8253::write(int addr, uint8_t w8)
 {
     switch (addr & 3) {
         case 0x03:
@@ -363,7 +373,7 @@ IRAM_ATTR
 void I8253::gen_sound(int nclocks)
 {
     constexpr int16_t mul = 12;              // 6 == good sound but begins flickering in bolderm when diagonal scrolling
-    constexpr int16_t div = VI53_CLOCKS_PER_SAMPLE / mul; 
+    constexpr int16_t div = VI53_CLOCKS_PER_SAMPLE / mul;
     int16_t remaining = nclocks;
     int16_t counted = this->counted_carry;
     int16_t accu = this->accu_carry;
@@ -399,6 +409,6 @@ void I8253::gen_sound(int nclocks)
     }
 
     // carry over to the next call
-    this->counted_carry = counted; 
+    this->counted_carry = counted;
     this->accu_carry = accu;
 }
