@@ -494,7 +494,6 @@ public:
             }
 
             key_acceleration += 1 + key_acceleration/3;
-
         }
     }
 };

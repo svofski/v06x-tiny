@@ -1,3 +1,5 @@
+#define CLEAN_BEEP_TEST 0
+
 #include <cstdint>
 #include "esp_attr.h"
 #include "esp_log.h"
@@ -14,6 +16,13 @@
 #include "AySound.h"
 #include "esp_filler.h"
 
+static inline uint32_t getccount()
+{
+    uint32_t ccount;
+    asm volatile("rsr.ccount %0" : "=a"(ccount));
+    return ccount;
+}
+
 namespace audio
 {
 
@@ -22,15 +31,20 @@ uint8_t * ay_pp[AUDIO_NBUFFERS];
 
 audio_sample_t audio_copy[AUDIO_SAMPLES_PER_FRAME];
 
+i2s_chan_handle_t tx_handle;
+bool i2s_ready;
+
 #if WITH_I2S_AUDIO
 IRAM_ATTR
 void audio_task(void *unused)
 {
-    i2s_chan_handle_t tx_handle;
     /* Get the default channel configuration by the helper macro.
     * This helper macro is defined in `i2s_common.h` and shared by all the I2S communication modes.
     * It can help to specify the I2S role and port ID */
     i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    chan_cfg.dma_desc_num = 2;
+    chan_cfg.dma_frame_num = 624;
+
     /* Allocate a new TX channel and get the handle of this channel */
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, &tx_handle, NULL));
 
@@ -59,26 +73,46 @@ void audio_task(void *unused)
     /* Before writing data, start the TX channel first */
     ESP_ERROR_CHECK(i2s_channel_enable(tx_handle));
     ESP_LOGI(TAG, "Created I2S channel and started audio task");
+#if I2S_NOQUEUE
+    i2s_ready = true;
+    while(1) vTaskDelay(pdMS_TO_TICKS(1000));
+#else
     while(1) {
         audio_queue_item_t aqi;
         size_t written;
         BaseType_t result = xQueueReceive(audio_queue, &aqi, portMAX_DELAY);
         if (result == pdTRUE) {
-            #ifdef CLEAN_BEEP_TEST
-            for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
-                audio_pp[aqi.audiobuf_index][i] = ((i / 12) & 1) << 13;
-            }
-            #endif
-            AySound::gen_sound(AUDIO_SAMPLES_PER_FRAME - aqi.ay_bufpos, aqi.ay_bufpos);
+            //AySound::gen_sound(AUDIO_SAMPLES_PER_FRAME - aqi.ay_bufpos, aqi.ay_bufpos);
             for (size_t i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
                 audio_pp[aqi.audiobuf_index][i] += ay_pp[aqi.audiobuf_index][i] << AUDIO_SCALE_AY;
+                //printf("%d ", audio_pp[aqi.audiobuf_index][i]);
             }
+            #if CLEAN_BEEP_TEST
+            for (int i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
+                audio_pp[aqi.audiobuf_index][i] = ((i / 12) & 1) << 7; //13;
+            }
+            #endif
         }
-        //i2s_channel_write(tx_handle, audio_copy, AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 5 / portTICK_PERIOD_MS);
+        else {
+            printf("audio: starved!");
+        }
+        uint32_t start = getccount();
         i2s_channel_write(tx_handle, audio_pp[aqi.audiobuf_index], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 50 / portTICK_PERIOD_MS);
+        uint32_t elapsed = getccount() - start;
+        //printf("\n\n");
+        // test if buffer is usable after channel write (yes)
+        //memset(audio_pp[aqi.audiobuf_index], 0, AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE);
         //printf("audio: buf %d -> %u\n", aqi.audiobuf_index, written);
         //printf("ay: falta %d samps\n", AUDIO_SAMPLES_PER_FRAME - aqi.ay_bufpos);
+        //if (elapsed >= 4800000) 
+        //printf("audio: cc=%lu  %d %d %d %d\n", elapsed, 
+        //        audio_pp[aqi.audiobuf_index][0],
+        //        audio_pp[aqi.audiobuf_index][1],
+        //        audio_pp[aqi.audiobuf_index][2],
+        //        audio_pp[aqi.audiobuf_index][3]
+        //        );
     }
+#endif
 }
 #endif
 

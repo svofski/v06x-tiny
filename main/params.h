@@ -21,6 +21,20 @@
 //#define VI53_HIGH_FREQ_MUTE 1   // mute timer frequencies that are too high for our samplerate
 
 #define WITH_I2S_AUDIO 1            // audio output via I2S to MAX98357A
+#define I2S_NOQUEUE 0               // push i2s audio from the main loop 
+
+// audio numbers explained:
+// mclk = 12e6
+// cpu_freq = 3e6
+// 
+// 312 lines
+// 192 cpu clocks per line
+//  = 59904 cpu clocks per frame
+//
+// audio samplerate = 31200
+// 
+// 59904 * 50 / 31200 = 96 cpu clocks per sample
+//                    = 48 vi53 clocks per sample
 
 #define AUDIO_SAMPLES_PER_FRAME (312*2)
 #define AUDIO_SAMPLERATE        (AUDIO_SAMPLES_PER_FRAME * 50)
@@ -93,7 +107,7 @@
 #define SDCARD_NRETRIES         10
 
 // disable USB-JTAG to stop interference on GPIO 19 & 20
-#define DISABLE_USB_JTAG 1
+#define DISABLE_USB_JTAG 0
 
 extern const char * TAG;
 

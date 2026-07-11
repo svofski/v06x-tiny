@@ -362,20 +362,35 @@ static void i8080_retrieve_flags(void) {
 int trace_enable = 0;
 
 // this is a real life saver, otherwise instruction decoder is very slow
-#pragma GCC optimize("jump-tables")
+#pragma GCC optimize("O3,jump-tables")
+
+int i8080_execute_with_out(uint8_t opcode);
+int i8080_execute_norm(uint8_t opcode);
+
+int (*i8080_execute)(uint8_t) = i8080_execute_norm;
 
 IRAM_ATTR
-int i8080_execute(int opcode) {
-    #if I8080_OUT_DELAYED
-    if (delayed_out_port >= 0) {
-        i8080_hal_io_output(delayed_out_port, A);
-        delayed_out_port = -1;
-    }
-    #endif
+int i8080_execute_with_out(uint8_t opcode)
+{
+    i8080_hal_io_output(delayed_out_port, A);
+    i8080_execute = i8080_execute_norm;
+    return i8080_execute_norm(opcode);
+}
 
+IRAM_ATTR
+int i8080_execute_norm(uint8_t opcode) {
     //if (trace_enable) printf("pc=%04x i=%02x A=%02x BC=%04x\n", PC, opcode, A, BC);
     int cpu_cycles; (void)cpu_cycles;
     int v_cycles;
+//    if (opcode == 0x76) {
+//            /* originally 4, but: */
+//            /* hlt has two M-cycles, M1: 4 T-states and M2 2 T-states */
+//            /* I'm not sure if this should be reflected here */
+//            v_cycles = 4;   // 8
+//            cpu_cycles = 4;
+//            PC--;
+//            goto ei_check;
+//    }
     switch (opcode) {
         case 0x00:            /* nop */
         // Undocumented NOP.
@@ -1687,6 +1702,7 @@ int i8080_execute(int opcode) {
             v_cycles = 12;
             #if I8080_OUT_DELAYED
             delayed_out_port = RD_BYTE(PC++);
+            i8080_execute = i8080_execute_with_out;
             #else
             i8080_hal_io_output(RD_BYTE(PC++), A);
             #endif
@@ -2031,6 +2047,7 @@ int i8080_execute(int opcode) {
             v_cycles = -1;
             break;
     }
+//ei_check:
     if (EI_PENDING) {
         if (--EI_PENDING == 0) {
             IFF = 1;
@@ -2045,10 +2062,26 @@ int i8080_execute(int opcode) {
 #endif
 }
 
+
 IRAM_ATTR
 int i8080_instruction() {
     last_opcode = RD_OPCODE(PC++);
     return i8080_execute(last_opcode);
+}
+
+IRAM_ATTR
+int i8080_run(int maxclocks) {
+    int clocks = 0;
+    while (clocks < maxclocks) {
+        clocks += i8080_instruction();
+        if (last_opcode == 0xd3 || last_opcode == 0xdb) // i/o -> let commit
+            break;
+        if (last_opcode == 0x76) {  // hlt -> skip all available time
+            clocks = maxclocks;
+            break;
+        }
+    }
+    return clocks;
 }
 
 IRAM_ATTR

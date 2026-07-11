@@ -117,6 +117,8 @@ void v06x_task(void *param)
     wav = new Wav();
     WavPlayer * tape_player = new WavPlayer(*wav);
     I8253* timer = new I8253();
+
+    ESP_LOGI(TAG, "8253: %p cu: %p %p %p", timer, &timer->counters[0], &timer->counters[1], &timer->counters[2]);
     
     //// SPI keyboard
     //keyboard::init();

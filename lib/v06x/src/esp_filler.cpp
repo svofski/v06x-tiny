@@ -23,6 +23,14 @@
 #include "scaler.h"
 #include "audio.h"
 
+#if I2S_NOQUEUE
+#include "driver/i2s_std.h"
+namespace audio { 
+    extern i2s_chan_handle_t tx_handle; 
+    extern bool i2s_ready;
+}
+#endif
+
 int audiobuf_index;
 
 namespace esp_filler
@@ -99,6 +107,7 @@ uint16_t py2[16];
 uint16_t py2_512[16];       // mode512 pairs of pixels
 uint16_t py2_256[16];       // mode256 pairs of pixels
 
+IRAM_ATTR
 void write_pal(uint8_t adr8, uint8_t rgb)
 {
     // write 256-pixel pal
@@ -125,6 +134,7 @@ void write_pal(uint8_t adr8, uint8_t rgb)
     }
 }
 
+IRAM_ATTR
 void modechange()
 {
     if (mode512) {
@@ -143,6 +153,7 @@ void print_palette()
     printf("\n");
 }
 
+IRAM_ATTR
 void commit_palette(int index)
 {
     esp_filler::write_pal(index, palette_byte);
@@ -165,6 +176,10 @@ void init(Memory * _memory, IO * _io, uint8_t * buf1, uint8_t * buf2, I8253 * _v
     audiobuf_index = 0;
     vi53->audio_buf = audio::audio_pp[audiobuf_index];
     AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
+    vi53->count_tape = [](int n) {
+        esp_filler::tape_player->advance(n);
+        return esp_filler::tape_player->sample();
+    };
 
     io->onborderchange = [](int border) {
         border_index = border;
@@ -272,7 +287,8 @@ inline int shiftNicePixels(uint32_t & nicepixels)
 }
 
 volatile uint32_t print_coconut_max = 0;
-volatile uint32_t coconut_max = 0;
+volatile uint32_t ccount_timer = 0;
+volatile uint32_t ccount_frame = 0;
 
 IRAM_ATTR
 inline void slab8()
@@ -377,7 +393,7 @@ void borderslab()
 int rpixels;                        // raster pixels count
 int last_rpixels;                   // previous count
 int frame_rpixels;                  // rpixels at the beginning of the current frame
-int ay_bufpos, ay_bufpos_reg;       // ay buffer position
+int ay_bufpos;                      // ay buffer position
 
 // generate ay sound up to current position
 inline void gensound_ay()
@@ -398,10 +414,10 @@ inline void gensound_vi53()
     // to make tape-in sound pretty vi53->gen_sound() should call tape_player->advance() instead
     //esp_filler::tape_player->advance(esp_filler::rpixels - esp_filler::last_rpixels);
     //esp_filler::vi53->tapein = esp_filler::tape_player->sample();
-    vi53->count_tape = [](int n) {
-        esp_filler::tape_player->advance(n);
-        return esp_filler::tape_player->sample();
-    };
+    //vi53->count_tape = [](int n) {
+    //    esp_filler::tape_player->advance(n);
+    //    return esp_filler::tape_player->sample();
+    //};
     // vi53 and beeper update
     vi53->gen_sound((rpixels - last_rpixels) >> 1);
     last_rpixels = rpixels;
@@ -437,21 +453,21 @@ int bob(int maxframes)
     int ipixels = rpixels;
 
     int line6 = 0;          // everything is computed in 6-line chunks that fill up scaler input buffer
-    ay_bufpos_reg = 0;
-
 
     for(int frm = 0; maxframes == 0 || frm < maxframes; ++frm) {
-        print_coconut_max = coconut_max;
-        coconut_max = 0;
+        uint32_t ccount_frame_start = getccount();
+        print_coconut_max = 0;
+        uint32_t coconut = getccount();
 
         write_buffer = 0;
         bmp.bmp8 = buffers[write_buffer];
         line6 = 6;
 
         // TODO: this should work and help against integer overflow, but it makes sound stutter for some reason
-        //rpixels -= 59904;
-        //last_rpixels -= 59904;
-        //ipixels -= 59904;
+        // 2026: apparently sound stutter is unrelated
+        rpixels -= 59904;
+        last_rpixels -= 59904;
+        ipixels -= 59904;
 
         frame_rpixels = rpixels;
         ay_bufpos = 0;
@@ -467,8 +483,8 @@ int bob(int maxframes)
                     if (line == 0 && column == 9) {
                         irq = inte;
                     }
-                    if (ipixels <= rpixels) [[unlikely]] {
-                        if (irq && i8080cpu::i8080_iff()) [[unlikely]] {
+                    if (ipixels <= rpixels) {
+                        if (irq && i8080cpu::i8080_iff()) {
                             inte = false;
                             if (i8080cpu::last_opcode == 0x76) {
                                 i8080cpu::i8080_jump(i8080cpu::i8080_pc() + 1);
@@ -498,9 +514,9 @@ int bob(int maxframes)
                     #if DEBUG_INSTRUCTION_STRIPES
                     bool xoxo = false;
                     #endif
-                    if (ipixels <= rpixels) [[unlikely]] {
+                    if (ipixels <= rpixels) {
                         commit_pal = false;
-                        ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+                        ipixels += i8080cpu::i8080_run(4 * (48 - column)); 
                         #if DEBUG_INSTRUCTION_STRIPES
                         xoxo = true;
                         #endif
@@ -534,9 +550,9 @@ int bob(int maxframes)
             /// COLUMNS 0..9
             for (column = 0; column < 10; ++column) {
                 // (4, 8, 12, 16, 20, 24) * 4
-                if (ipixels <= rpixels) [[unlikely]] {
+                if (ipixels <= rpixels) {
                     commit_pal = false;
-                    ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+                    ipixels += i8080cpu::i8080_run(4 * (10 - column)); 
                 }
                 rpixels += 4;
             }
@@ -549,26 +565,22 @@ int bob(int maxframes)
             fb_column = -1;
             /// COLUMNS 10...41
             {
-                uint32_t coconut = getccount();
 
                 for (; column < 42; ++column) {
                     // (4, 8, 12, 16, 20, 24) * 4
-                    if (ipixels <= rpixels) [[unlikely]] {
+                    if (ipixels <= rpixels) {
                         commit_pal = false;
-                        ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+                        ipixels += i8080cpu::i8080_run(4 * (42 - column)); 
                     }
 
                     ++fb_column;
                     slab8_pal();
                     rpixels += 4;
                 }
-
-                uint32_t elapsed = getccount() - coconut;
-                coconut_max += elapsed;
             }
 
             // COLUMN 42: right edge of the bitplane area
-            if (ipixels <= rpixels) [[unlikely]] {
+            if (ipixels <= rpixels) {
                 commit_pal = false;
                 ipixels += i8080cpu::i8080_instruction(); // divisible by 4
             }
@@ -579,9 +591,9 @@ int bob(int maxframes)
             /// COLUMNS 43.....
             for (; column < 48; ++column) {
                 // (4, 8, 12, 16, 20, 24) * 4
-                if (ipixels <= rpixels) [[unlikely]] {
+                if (ipixels <= rpixels) {
                     commit_pal = false;
-                    ipixels += i8080cpu::i8080_instruction(); // divisible by 4
+                    ipixels += i8080cpu::i8080_run(4 * (48 - column)); 
                     if (commit_pal) commit_palette(border_index);
                     if (commit_io && --commit_io == 0) {
                         io->commit();
@@ -608,12 +620,18 @@ rowend:
                 bmp.bmp8 = buffers[write_buffer];
                 line6 = 6;
 
+                uint32_t row_coconut = getccount() - coconut;
+                if (row_coconut > print_coconut_max) print_coconut_max = row_coconut;
+                //print_coconut_max = getccount() - coconut;
+
                 if (line > first_visible_line) {// && line < last_visible_line) {
                     int pos_px;
                     do {
                         xQueueReceive(::scaler_to_emu, &pos_px, portMAX_DELAY);
                     } while (line == first_visible_line + 6 - 1 && pos_px != 0);
                 }
+
+                coconut = getccount();
             }
         }
         keyboard::io_commit_ruslat();
@@ -632,9 +650,28 @@ rowend:
 
         {
             int nsamps = vi53->audio_buf - audio::audio_pp[audiobuf_index];
+            if (nsamps != AUDIO_SAMPLES_PER_FRAME) printf("!!! nsamps=%d\n", nsamps);
+            assert(nsamps == AUDIO_SAMPLES_PER_FRAME);
         }
+        gensound_ay();  // finish off ay sound for this chunk
 
-        ay_bufpos_reg = ay_bufpos;
+#if I2S_NOQUEUE
+        // mix ay + timer etc
+        for (size_t i = 0; i < AUDIO_SAMPLES_PER_FRAME; ++i) {
+            audio::audio_pp[audiobuf_index][i] += audio::ay_pp[audiobuf_index][i] << AUDIO_SCALE_AY;
+        }
+        if (audio::i2s_ready) {
+            size_t written;
+            i2s_channel_write(audio::tx_handle, audio::audio_pp[audiobuf_index], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 50 / portTICK_PERIOD_MS);
+
+        }
+        if (++audiobuf_index == AUDIO_NBUFFERS) audiobuf_index = 0;
+        vi53->audio_buf = audio::audio_pp[audiobuf_index];
+        AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
+#else
+        //printf("c[0]=%d c[1]=%d c[2]=%d\n", vi53->counters[0].out,
+        //        vi53->counters[1].out, vi53->counters[2].out);
+
         audio_queue_item_t aqi = {
             .audiobuf_index = audiobuf_index,
             .ay_bufpos = ay_bufpos
@@ -645,7 +682,7 @@ rowend:
 
         vi53->audio_buf = audio::audio_pp[audiobuf_index];
         AySound::SamplebufAY = audio::ay_pp[audiobuf_index];
-
+#endif
         int cmd;
         if (xQueueReceive(::emu_command_queue, &cmd, 0)) {
             if (cmd == CMD_EMU_BREAK) {
@@ -662,6 +699,11 @@ rowend:
 
         v06x_framecount = v06x_framecount + 1;
         v06x_frame_cycles = ipixels;
+
+        ccount_timer = vi53->ccount_accu;
+        vi53->ccount_accu = 0;
+
+        ccount_frame = getccount() - ccount_frame_start;
     }
 
     return maxframes;
@@ -753,48 +795,6 @@ void i8080_hal_io_output(int port, int value)
     //if (port < 16) printf("output port %02x=%02x\n", port, value);
     esp_filler::io->output(port, value);
 
-    #if 0
-
-    #ifndef TIMED_COMMIT
-    esp_filler::io->commit_palette(0x0f & esp_filler::color_index);
-    #else
-    // non-palette i/o
-    if (port >= 0x15 || port == 0x10) {
-        esp_filler::io->commit();           // all regular peripherals
-    }
-    else if (port == 0x14) {
-        // generate ay sound up to current position
-        size_t bufpos = (esp_filler::rpixels - esp_filler::frame_rpixels) / 96;
-        if (bufpos > esp_filler::ay_bufpos) {
-            AySound::gen_sound(bufpos - esp_filler::ay_bufpos, esp_filler::ay_bufpos);
-            esp_filler::ay_bufpos = bufpos;
-        }
-        esp_filler::io->commit();           // all regular peripherals
-    }
-    else if (port <= 0xb) {
-        if (port >= 0x08) {
-            #ifndef VI53_GENSOUND
-            esp_filler::vi53->count_clocks((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
-            esp_filler::last_rpixels = esp_filler::rpixels;
-            #else
-            esp_filler::vi53->gen_sound((esp_filler::rpixels - esp_filler::last_rpixels) >> 1); // 96 timer clocks per line
-            esp_filler::last_rpixels = esp_filler::rpixels;
-            #endif
-        }
-        esp_filler::io->commit();           // all regular peripherals
-    }
-    else if (port >= 0xc && port <= 0xf) {
-        esp_filler::commit_pal = true;      // near-instant
-        esp_filler::palette_byte = value;
-    }
-    else {
-        esp_filler::commit_io = 2;          // border updates with delay
-    }
-    #endif
-
-    #else
-
-
     switch (port) {
         case 0x02:
             esp_filler::commit_io = 2; // border updates with delay
@@ -819,8 +819,6 @@ void i8080_hal_io_output(int port, int value)
             esp_filler::io->commit();
             break;
     }
-
-    #endif
 }
 
 IRAM_ATTR

@@ -68,11 +68,9 @@ typedef struct user_context_ {
 
 user_context_t user_context;
 
-
 uint32_t read_buffer_index;
 uint8_t * bounce_buf8[2];
 
-//uint16_t** osd_buf16;
 OSD * osd;
 OSD * set_osd = nullptr;
 volatile bool  set_osd_pls = false;
@@ -557,7 +555,6 @@ copy_osd(uint16_t * __restrict bounce16, int lcd_y)
     }
 }
 
-
 #if SCALER_BENCHMARK 
 static inline uint32_t getccount()
 {
@@ -752,6 +749,7 @@ void create_lcd_driver_task(void *pvParameter)
     vTaskDelete(NULL);
 }
 
+IRAM_ATTR
 static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_rgb_panel_event_data_t *event_data, void *user_data)
 {
     frameduration_us = esp_timer_get_time() - lastframe_us;
@@ -772,7 +770,6 @@ static bool example_on_vsync_event(esp_lcd_panel_handle_t panel, const esp_lcd_r
 
 void show_osd(OSD * _osd)
 {
-    //osd = _osd;
     set_osd = _osd;
     set_osd_pls = true;
 }
