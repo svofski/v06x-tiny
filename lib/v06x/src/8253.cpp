@@ -28,20 +28,11 @@ static uint16_t frombcd(uint16_t x) {
     return result;
 }
 
-static inline uint32_t getccount()
-{
-    uint32_t ccount;
-    asm volatile("rsr.ccount %0" : "=a"(ccount));
-    return ccount;
-}
-
-IRAM_ATTR
 CounterUnit::CounterUnit()
 {
     this->reset();
 }
 
-IRAM_ATTR
 void CounterUnit::reset()
 {
     latch_value = -1;
@@ -51,10 +42,8 @@ void CounterUnit::reset()
     loadvalue = 0;
     flags = 0;
     value = 0;
-    counter_proc = dummy_mode;
 }
 
-IRAM_ATTR
 void CounterUnit::SetMode(int new_mode, int new_latch_mode, int new_bcd_mode)
 {
     this->count_clocks(1);
@@ -72,30 +61,25 @@ void CounterUnit::SetMode(int new_mode, int new_latch_mode, int new_bcd_mode)
             this->out = 0;
             this->armed = true;
             this->enabled = false;
-            this->counter_proc = mode0_init;
             break;
         case 1:
             this->out = 1;
             this->armed = true;
             this->enabled = false;
-            this->counter_proc = mode1_init;
             break;
         case 2:
             this->out = 1;
             this->enabled = false;
-            this->counter_proc = mode2_init;
             // armed?
             break;
         case 3:
             this->out = 1;
             this->enabled = false;
-            this->counter_proc = mode3_init;  // expect reload value
             // armed?
             break;
         default:
             this->out = 1;
             this->enabled = false;
-            this->counter_proc = dummy_mode;
             // armed?
     }
     this->load = false;
@@ -103,120 +87,122 @@ void CounterUnit::SetMode(int new_mode, int new_latch_mode, int new_bcd_mode)
     this->write_state = 0;
 }
 
-IRAM_ATTR
 void CounterUnit::Latch(uint8_t w8) {
     this->count_clocks(1);
     this->latch_value = this->value;
 }
 
 IRAM_ATTR
-void CounterUnit::mode0_init(CounterUnit *ctx, int nclocks) // Interrupt on terminal count
+inline void CounterUnit::mode0(int nclocks) // Interrupt on terminal count
 {
-    if (ctx->load) {
-        ctx->value = ctx->loadvalue;
-        ctx->enabled = true;
-        ctx->armed = true;
-        ctx->out = 0;
-        ctx->load = false;
-        ctx->counter_proc = mode0_count;
-        mode0_count(ctx, nclocks);
+    if (this->load) {
+        this->value = this->loadvalue;
+        this->enabled = true;
+        this->armed = true;
+        this->out = 0;
+        this->load = false;
     }
-}
-
-IRAM_ATTR
-void CounterUnit::mode0_count(CounterUnit *ctx, int nclocks)
-{
-   int previous = ctx->value;
-   ctx->value -= nclocks;
-   if (ctx->value <= 0) {
-       if (ctx->armed) {
-           if (previous != 0) ctx->out = 1;
-           ctx->armed = false;
-       }
-       ctx->value += ctx->bcd ? 10000 : 65536;
-   }
-}
-
-IRAM_ATTR
-void CounterUnit::mode1_init(CounterUnit *ctx, int nclocks)
-{
-    // Programmable one-shot
-    if (ctx->load) {
-        //ctx->value = ctx->loadvalue;  -- quirk!
-        ctx->enabled = true;
-        ctx->counter_proc = mode1_count;
-        mode1_count(ctx, nclocks);
-    }
-}
-
-IRAM_ATTR
-void CounterUnit::mode1_count(CounterUnit *ctx, int nclocks)
-{
-    ctx->value -= nclocks;
-    if (ctx->value <= 0) {
-        ctx->value += ctx->loadvalue;
-    }
-}
-
-IRAM_ATTR
-void CounterUnit::mode2_init(CounterUnit *ctx, int nclocks)
-{
-    if (ctx->load) {
-        ctx->value = ctx->loadvalue;
-        ctx->load = false;
-        ctx->enabled = true;
-        ctx->counter_proc = mode2_count;
-        mode2_count(ctx, nclocks);
-    }
-}
-
-IRAM_ATTR
-void CounterUnit::mode2_count(CounterUnit *ctx, int nclocks)
-{
-    ctx->value -= nclocks;
-    if (ctx->value <= 0) {
-        int skips = (-ctx->value) / ctx->loadvalue + 1;
-        ctx->value += skips * ctx->loadvalue;
-    }
-}
-
-IRAM_ATTR
-void CounterUnit::mode3_init(CounterUnit *ctx, int nclocks)
-{
-    if (ctx->load) {
-        ctx->value = ctx->loadvalue;
-        ctx->load = false;
-        ctx->counter_proc = mode3_count;
-        mode3_count(ctx, nclocks);
-    }
-}
-
-IRAM_ATTR
-void CounterUnit::mode3_count(CounterUnit *ctx, int nclocks)
-{
-    ctx->value -= nclocks + nclocks;
-    while (ctx->value <= 0) {
-        ctx->out ^= 1;
-        int reload = ctx->loadvalue;
-        ctx->value += reload;
-        if ((reload & 1) == 1) {
-            ctx->value -= ctx->out == 0 ? 3 : 1;
+    if (this->enabled) {
+        int previous = this->value;
+        this->value -= nclocks;
+        if (this->value <= 0) {
+            if (this->armed) {
+                if (previous != 0) this->out = 1;
+                this->armed = false;
+            }
+            this->value += this->bcd ? 10000 : 65536;
         }
     }
 }
 
-//IRAM_ATTR
-void CounterUnit::dummy_mode(CounterUnit *ctx, int nclocks)
+IRAM_ATTR
+void CounterUnit::mode1(int nclocks)
+{
+    // Programmable one-shot
+    if (!this->enabled && this->load) {
+        this->enabled = true;
+    }
+
+    if (this->enabled) {
+        this->value -= nclocks;
+        if (this->value <= 0) {
+            int reload = this->loadvalue == 0 ?
+                (this->bcd ? 10000 : 0x10000 ) : (this->loadvalue + 1);
+            this->value += reload;
+        }
+    }
+}
+
+IRAM_ATTR
+void CounterUnit::mode2(int nclocks)
+{
+    // Rate generator
+    if (!this->enabled && this->load) {
+        this->value = this->loadvalue;
+        this->load = false;
+        this->enabled = true;
+    }
+    this->value -= nclocks;
+    if (this->value <= 0) {
+        int reload = (this->loadvalue == 0) ? (this->bcd ? 10000 : 0x10000) : this->loadvalue;
+        int skips = (-this->value) / reload + 1;
+        this->value += skips * reload;
+    }
+}
+
+IRAM_ATTR
+inline void CounterUnit::mode3(int nclocks)
+{
+    if (!this->enabled && this->load) {
+        this->value = this->loadvalue;
+        this->load = false;
+        this->enabled = true;
+    }
+    if (this->enabled) {
+        this->value -= nclocks + nclocks;
+        while (this->value <= 0) {
+            this->out ^= 1;
+            int reload = this->loadvalue;
+            this->value += reload;
+            if ((reload & 1) == 1) {
+                this->value -= this->out == 0 ? 3 : 1;
+            }
+        }
+    }
+}
+
+void CounterUnit::mode4(int nclocks)
+{
+}
+void CounterUnit::mode5(int nclocks)
 {
 }
 
 IRAM_ATTR
 inline void CounterUnit::count_clocks(int nclocks)
 {
-    this->counter_proc(this, nclocks);
+    switch (this->mode_int) {
+        case 0: // Interrupt on terminal count
+            mode0(nclocks);
+            break;
+        case 1: // Programmable one-shot
+            mode1(nclocks);
+            break;
+        case 2: // Rate generator
+            mode2(nclocks);
+            break;
+        case 3: // Square wave generator
+            mode3(nclocks);
+            break;
+        case 4: // Software triggered strobe
+            break;
+        case 5: // Hardware triggered strobe
+            break;
+        default:
+            break;
+    }
 }
 
-IRAM_ATTR
 void CounterUnit::write_value(uint8_t w8) {
     if (this->latch_mode == 3) {
         // lsb, msb
@@ -251,20 +237,12 @@ void CounterUnit::write_value(uint8_t w8) {
         if (this->bcd) {
             this->loadvalue = frombcd(this->loadvalue);
         }
-        // adjust reload value for mode 3
-        if (this->mode_int == 1) {
-            this->loadvalue = (this->loadvalue == 0) ? (this->bcd ? 10000 : 0x10000 ) : (this->loadvalue + 1);
-        }
-        else if (this->mode_int == 2) {
+        if (this->mode_int == 3) {
             this->loadvalue = (this->loadvalue == 0) ? (this->bcd ? 10000 : 0x10000) : this->loadvalue;
-        }
-        else if (this->mode_int == 3 && this->loadvalue == 0) {
-            this->loadvalue = this->bcd ? 10000 : 0x10000;
         }
     }
 }
 
-IRAM_ATTR
 int CounterUnit::read_value()
 {
     int value = 0;
@@ -307,7 +285,6 @@ int CounterUnit::read_value()
     return value;
 }
 
-IRAM_ATTR
 I8253::I8253() : control_word(0)
 {
     this->counted_carry = 0;
@@ -316,7 +293,6 @@ I8253::I8253() : control_word(0)
     this->covox = 0;
 }
 
-IRAM_ATTR
 void I8253::write_cw(uint8_t w8)
 {
     unsigned counter_set = (w8 >> 6) & 3;
@@ -337,7 +313,6 @@ void I8253::write_cw(uint8_t w8)
     }
 }
 
-IRAM_ATTR
 void I8253::write(int addr, uint8_t w8)
 {
     switch (addr & 3) {
@@ -348,7 +323,6 @@ void I8253::write(int addr, uint8_t w8)
     }
 }
 
-IRAM_ATTR
 int I8253::read(int addr)
 {
     switch (addr & 3) {
@@ -360,14 +334,13 @@ int I8253::read(int addr)
 }
 
 IRAM_ATTR
-void I8253::count_clocks(int nclocks)
+inline void I8253::count_clocks(int nclocks)
 {
     this->counters[0].count_clocks(nclocks);
     this->counters[1].count_clocks(nclocks);
     this->counters[2].count_clocks(nclocks);
 }
 
-IRAM_ATTR
 void I8253::reset()
 {
     this->counters[0].reset();
@@ -380,10 +353,7 @@ void I8253::reset()
 IRAM_ATTR
 void I8253::gen_sound(int nclocks)
 {
-    uint32_t ccount = getccount();
-
-    //printf("gen_sound: %d\n", nclocks);
-    constexpr int16_t mul = 12; //48;              // 6 == good sound but begins flickering in bolderm when diagonal scrolling
+    constexpr int16_t mul = 12;              // 6 == good sound but begins flickering in bolderm when diagonal scrolling
     constexpr int16_t div = VI53_CLOCKS_PER_SAMPLE / mul;
     int16_t remaining = nclocks;
     int16_t counted = this->counted_carry;
@@ -399,7 +369,6 @@ void I8253::gen_sound(int nclocks)
     if (!count) count = std::min(mul, remaining);   // if there's no remainder, count as much as possible
 
     for (; remaining > 0; ) {
-        //printf("  count=%d remaining=%d\n", count, remaining);
         count_clocks(count);
         counted += count;
         remaining -= count;
@@ -408,8 +377,6 @@ void I8253::gen_sound(int nclocks)
         }
         if (count + count_rem == mul) {
             accu += counters[0].out + counters[1].out + counters[2].out + beeper + tapein;
-            // test: crackles
-            //accu += 3;
             // add tape out here i guess?
         }
         count_rem = 0;  // forget remainder
@@ -425,6 +392,4 @@ void I8253::gen_sound(int nclocks)
     // carry over to the next call
     this->counted_carry = counted;
     this->accu_carry = accu;
-
-    this->ccount_accu += getccount() - ccount;
 }

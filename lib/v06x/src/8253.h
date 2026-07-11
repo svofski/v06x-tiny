@@ -10,17 +10,14 @@ class __attribute__((aligned(4))) CounterUnit
 {
     friend class TestOfCounterUnit;
 
-    // keep all fields 32-bit aligned
     int latch_value;
     int write_state;
     int latch_mode;
     int mode_int;
-
     int loadvalue;
     int value;
 
 public:
-
     union {
         uint8_t flags;
         struct {
@@ -30,11 +27,10 @@ public:
             bool bcd:1;
         };
     };
-
     uint8_t write_lsb;
     uint8_t write_msb;
-    uint8_t out;
 
+    uint8_t out;
 
 public:
     CounterUnit();
@@ -42,37 +38,30 @@ public:
 
     void SetMode(int new_mode, int new_latch_mode, int new_bcd_mode);
     void Latch(uint8_t w8);
-    static void mode0_init(CounterUnit *ctx, int nclocks);
-    static void mode0_count(CounterUnit *ctx, int nclocks);
-    static void mode1_init(CounterUnit *ctx, int nclocks);
-    static void mode1_count(CounterUnit *ctx, int nclocks);
-    static void mode2_init(CounterUnit *ctx, int nclocks);
-    static void mode2_count(CounterUnit *ctx, int nclocks);
-    static void mode3_init(CounterUnit *ctx, int nclocks);
-    static void mode3_count(CounterUnit *ctx, int nclocks);
-    static void dummy_mode(CounterUnit *ctx, int nclocks);
-
-
-    void (*counter_proc)(CounterUnit *, int);
-
+    void mode0(int nclocks);
+    void mode1(int nclocks);
+    void mode2(int nclocks);
+    void mode3(int nclocks);
+    void mode4(int nclocks);
+    void mode5(int nclocks);
 
     void count_clocks(int nclocks);
     void write_value(uint8_t w8);
     int read_value();
-
 };
 
 
 class I8253
 {
 public:
-    uint32_t ccount_accu;   // benchmark counter
-
     CounterUnit counters[3];
+    uint32_t ccount_accu;
+private:
     uint8_t control_word;
     //int clock_carry;
     int16_t counted_carry;
     int16_t accu_carry;
+
 
 public:
     audio_sample_t * audio_buf; // pointer to external sound buf

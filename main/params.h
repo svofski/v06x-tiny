@@ -40,8 +40,11 @@
 #define AUDIO_SAMPLERATE        (AUDIO_SAMPLES_PER_FRAME * 50)
 #define AUDIO_SAMPLE_SIZE       2 // sizeof(int16_t)
 
-#define AUDIO_SCALE_8253        8   // shift 8253 by this many bits
-#define AUDIO_SCALE_AY          4   // shift ay by this many: 4 ok, 6 is loud but draws too much power
+// 0+ seems stable
+// 1+ seems stable, but crashes late in oblitterated
+// 2+ crashes in oblitterated early, at least with rshtech usb hub
+#define AUDIO_SCALE_8253        (0+8)   // shift 8253 by this many bits
+#define AUDIO_SCALE_AY          (0+4)   // shift ay by this many: 4 ok, 6 is loud but draws too much power
 
 #define VI53_CLOCKS_PER_SAMPLE  48  // 1.5MHz clocks per output sample
 
