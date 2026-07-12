@@ -96,9 +96,9 @@ void audio_task(void *unused)
         else {
             printf("audio: starved!");
         }
-        uint32_t start = getccount();
+        //uint32_t start = getccount();
         i2s_channel_write(tx_handle, audio_pp[aqi.audiobuf_index], AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE, &written, 50 / portTICK_PERIOD_MS);
-        uint32_t elapsed = getccount() - start;
+        //uint32_t elapsed = getccount() - start;
         //printf("\n\n");
         // test if buffer is usable after channel write (yes)
         //memset(audio_pp[aqi.audiobuf_index], 0, AUDIO_SAMPLES_PER_FRAME * AUDIO_SAMPLE_SIZE);

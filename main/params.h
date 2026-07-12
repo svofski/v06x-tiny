@@ -109,8 +109,13 @@
 #define SDCARD_FREQ_KHZ         10000
 #define SDCARD_NRETRIES         10
 
+#define KEYBOARD_FREQ_HZ        12000000 // 12MHz seems ok today!
+
 // disable USB-JTAG to stop interference on GPIO 19 & 20
-#define DISABLE_USB_JTAG 0
+#define DISABLE_USB_JTAG 1
+
+// print stats every 50 frames
+#define ENABLE_FRAME_REPORT 1
 
 extern const char * TAG;
 

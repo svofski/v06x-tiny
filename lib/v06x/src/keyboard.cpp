@@ -52,7 +52,7 @@ void init()
         .mode = 0, // should be mode 3 because rp2040 spi is so broken, but somehow mode 0 seems to work better
         .cs_ena_pretrans = 2,
         .cs_ena_posttrans = 2,
-        .clock_speed_hz = 12000000, // 12MHz seems ok today!
+        .clock_speed_hz = KEYBOARD_FREQ_HZ,
         .spics_io_num = PIN_NUM_KEYBOARD_SS,
         .queue_size = 1,
     };
@@ -117,7 +117,7 @@ void out_ruslat(uint8_t w8)
 
 void commit_ruslat()
 {
-    esp_err_t ret;
+    esp_err_t ret; (void)ret;
     if (transaction_active) {
         ret = spi_device_polling_end(spimatrix, portMAX_DELAY);
         transaction_active = false;
@@ -131,7 +131,7 @@ void commit_ruslat()
 //       V
 void read_modkeys()
 {
-    esp_err_t ret;
+    esp_err_t ret; (void)ret;
     if (transaction_active) {
         ret = spi_device_polling_end(spimatrix, portMAX_DELAY);
     }

@@ -47,7 +47,6 @@ volatile int filling = 0;
 
 volatile uint32_t frame_no = 0;
 
-//bool osd_showing = false;
 bool sdcard_busy = false;
 
 SDCard sdcard{};
@@ -71,19 +70,18 @@ void app_main(void)
     scaler::allocate_buffers();
     audio::allocate_buffers();
 
-
     // init scaler task on core 1 to pin scaler to core 1
     scaler::create_pinned_to_core();
     scaler::main_screen_turn_on();
     //scaler::show_osd(&osd);
 
-    vTaskDelay(pdMS_TO_TICKS(500));
+    //vTaskDelay(pdMS_TO_TICKS(500));
 
 #if DISABLE_USB_JTAG
     // disable native USB-JTAG to avoid interference on GPIO 19 (keyboard spi cs)
+    // (i'm not sure if it's real, seemed real in some captures)
     CLEAR_PERI_REG_MASK(USB_SERIAL_JTAG_CONF0_REG, USB_SERIAL_JTAG_USB_PAD_ENABLE);
 #endif
-    //audio::create_pinned_to_core();   -- hiccups
 
     // initialize spi bus before keyboard and sdcard
     SPIBus spi_bus{};
@@ -106,7 +104,7 @@ void app_main(void)
 
     // this will also scan the directories for all usable assets
     printf("Delay before mounting SD card\n");
-    vTaskDelay(pdMS_TO_TICKS(1500));
+    vTaskDelay(pdMS_TO_TICKS(250));
     sdcard.create_pinned_to_core();
 
 

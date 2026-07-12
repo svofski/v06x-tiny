@@ -164,65 +164,7 @@ static void tick_1s(void *arg)
     esp_filler::v06x_framecount = 0;
 }
 
-#if 0
-// fill one block with scaling up
-// scaler 5/4 horizontal, 8/5 vertical, or 4x5 -> 6x8
-// bgr233 532x300 -> rgb565 798x480
-static void IRAM_ATTR 
-fillcolumn_h54(uint16_t * col, uint32_t * src)
-{
-    int ofs = 0;
-
-    uint32_t s4_0 = src[0];
-    uint32_t s4_1 = src[BUFCOLUMNS * 1 / 4];
-    uint32_t s4_2 = src[BUFCOLUMNS * 2 / 4];
-    uint32_t s4_3 = src[BUFCOLUMNS * 3 / 4];
-    uint32_t s4_4 = src[BUFCOLUMNS * 4 / 4];
-
-    uint16_t c16_1;
-    uint16_t c16_2;
-    uint16_t c16_3;
-    uint16_t c16_4;
-
-    c16_1 = C8TO16(s4_0 >> 0);
-    c16_2 = C8TO16(s4_0 >> 8);
-    c16_3 = C8TO16(s4_0 >> 16);
-    c16_4 = C8TO16(s4_0 >> 24);
-        // x = 0, 0.6, 1.3, 2.0, 2.6, 3.3
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // + 0
-    c16_1 = C8TO16(s4_1 >> 0);
-    c16_2 = C8TO16(s4_1 >> 8);
-    c16_3 = C8TO16(s4_1 >> 16);
-    c16_4 = C8TO16(s4_1 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // + 0.625
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // + 1.25
-    c16_1 = C8TO16(s4_2 >> 0);
-    c16_2 = C8TO16(s4_2 >> 8);
-    c16_3 = C8TO16(s4_2 >> 16);
-    c16_4 = C8TO16(s4_2 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // + 1.875
-    c16_1 = C8TO16(s4_3 >> 0);
-    c16_2 = C8TO16(s4_3 >> 8);
-    c16_3 = C8TO16(s4_3 >> 16);
-    c16_4 = C8TO16(s4_3 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // + 2.5
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // + 3.125
-    c16_1 = C8TO16(s4_4 >> 0);
-    c16_2 = C8TO16(s4_4 >> 8);
-    c16_3 = C8TO16(s4_4 >> 16);
-    c16_4 = C8TO16(s4_4 >> 24);
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // + 3.75
-        col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
-        ofs += LCD_H_RES;  // + 4.375
-}
-#endif 
+#if !DITHER_FRAMES
 // fill one block with scaling up
 // scaler 5/4 horizontal, 8/5 vertical, or 4x5 -> 6x8
 // bgr233 532x300 -> rgb565 798x480
@@ -296,6 +238,7 @@ fillcolumn_h54_v106(uint16_t * col, const uint32_t * __restrict src)
         col[ofs] = c16_1; col[ofs+1] = c16_2; col[ofs+2] = c16_2; col[ofs+3] = c16_3; col[ofs+4] = c16_4;
         //ofs += LCD_H_RES;  // dst_line = 10
 }
+#endif
 
 // hscale 1:1
 static void IRAM_ATTR 
@@ -529,7 +472,7 @@ copy_osd(uint16_t * __restrict bounce16, int lcd_y)
     OSD::Color** osd_srcbuf = osd->framebuffer();
     int osdx = osd->x;
     int osdy_first = osd->y;
-    int osdy_end = osd->y + (osd->height << 1);
+    //int osdy_end = osd->y + (osd->height << 1);
     int osd_w = osd->width;
 
     for (int i = 0; i < BOUNCE_NLINES; i += 2) // fill 10 lines, doubling

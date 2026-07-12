@@ -611,7 +611,6 @@ rowend:
 
             if (--line6 == 0) {
                 // -- all sound i/o and generation update --
-                // ay line update
                 gensound_ay();
                 gensound_vi53();
                 // -- all sound i/o and generation update --
@@ -622,8 +621,8 @@ rowend:
 
                 uint32_t row_coconut = getccount() - coconut;
                 if (row_coconut > print_coconut_max) print_coconut_max = row_coconut;
-                //print_coconut_max = getccount() - coconut;
 
+                // on line 29 wait until lcd callback hits top of frame (pos_px == 0)
                 if (line > first_visible_line) {// && line < last_visible_line) {
                     int pos_px;
                     do {
