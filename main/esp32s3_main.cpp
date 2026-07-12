@@ -104,7 +104,7 @@ void app_main(void)
 
     // this will also scan the directories for all usable assets
     printf("Delay before mounting SD card\n");
-    vTaskDelay(pdMS_TO_TICKS(250));
+    vTaskDelay(pdMS_TO_TICKS(1500));
     sdcard.create_pinned_to_core();
 
 

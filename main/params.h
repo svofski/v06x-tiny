@@ -7,7 +7,7 @@
 
 #define SCALER_CORE     1           // video scaler core
 #define EMU_CORE        0           // main emulator loop
-#define AUDIO_CORE      0           // audio buffers copy/send
+#define AUDIO_CORE      1           // audio buffers copy/send
                                     // same core for emu/audio seems to be less glitchy
 #define SDCARD_CORE     1           // sdcard i/o
 
@@ -43,8 +43,8 @@
 // 0+ seems stable
 // 1+ seems stable, but crashes late in oblitterated
 // 2+ crashes in oblitterated early, at least with rshtech usb hub
-#define AUDIO_SCALE_8253        (0+8)   // shift 8253 by this many bits
-#define AUDIO_SCALE_AY          (0+4)   // shift ay by this many: 4 ok, 6 is loud but draws too much power
+#define AUDIO_SCALE_8253        (1+8)   // shift 8253 by this many bits
+#define AUDIO_SCALE_AY          (1+4)   // shift ay by this many: 4 ok, 6 is loud but draws too much power
 
 #define VI53_CLOCKS_PER_SAMPLE  48  // 1.5MHz clocks per output sample
 
